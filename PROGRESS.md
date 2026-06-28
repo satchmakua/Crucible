@@ -148,7 +148,7 @@ proper prompt).
 - Live checks: `import datasets` (3.6.0) works; `crucible run --policy ollama` with no
   server prints the clean backend error; `--dataset humaneval` returns the M5 message.
 
-**Still needs the human (the M1 acceptance test):** with Ollama running and a small
+**Still pending (the M1 acceptance test):** with Ollama running and a small
 instruct model pulled, `crucible run --method pass1 --dataset gsm8k --policy ollama
 --model <m> --limit 20` should print a real pass@1 + Wilson CI and write a record.
 
