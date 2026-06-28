@@ -7,6 +7,11 @@ cold. The real datasets — GSM8K, MATH-500, HumanEval, MBPP — load via Huggin
 
 from __future__ import annotations
 
-from crucible.data.registry import available_datasets, load_dataset, scripts_for
+from crucible.data.registry import (
+    CODE_DATASETS,
+    available_datasets,
+    load_dataset,
+    scripts_for,
+)
 
-__all__ = ["available_datasets", "load_dataset", "scripts_for"]
+__all__ = ["CODE_DATASETS", "available_datasets", "load_dataset", "scripts_for"]

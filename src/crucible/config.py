@@ -51,6 +51,9 @@ class RunConfig:
     step_accuracy: float = 0.6
     step_depth: int = 4
     step_prm_accuracy: float = 0.95
+    # Code track (M5). Executing model-generated code is OFF unless explicitly enabled.
+    allow_code_execution: bool = False
+    code_timeout: float = 10.0  # hard wall-clock cap per candidate, seconds
     output_dir: str = "runs"
 
     def to_dict(self) -> dict[str, Any]:

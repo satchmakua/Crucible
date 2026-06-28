@@ -19,3 +19,15 @@ MATH_COT_INSTRUCTION = (
 def build_cot_prompt(problem: Problem) -> str:
     """A zero-shot chain-of-thought prompt for a math problem."""
     return f"{MATH_COT_INSTRUCTION}Problem: {problem.prompt}\n\nSolution:"
+
+
+CODE_INSTRUCTION = (
+    "Write a correct, self-contained Python solution to the problem below. Put the "
+    "complete solution in a single ```python code block, defining the required "
+    "function(s) by name.\n\n"
+)
+
+
+def build_code_prompt(problem: Problem) -> str:
+    """A zero-shot prompt for a code problem (extractor keys on the ```python block)."""
+    return f"{CODE_INSTRUCTION}{problem.prompt}\n"

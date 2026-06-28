@@ -12,15 +12,17 @@ import time
 from dataclasses import dataclass, field, replace
 
 from crucible.config import RunConfig
-from crucible.data import load_dataset, scripts_for
+from crucible.data import CODE_DATASETS, load_dataset, scripts_for
 from crucible.domain.ports import OutcomeVerifier, PolicyModel, ProcessVerifier
 from crucible.domain.types import Compute, Result
 from crucible.inference import OllamaPolicy, ScriptedPolicy, SyntheticPolicy
+from crucible.prompts import build_code_prompt, build_cot_prompt
 from crucible.search import get_strategy
 from crucible.search.selectors import SELECTORS
 from crucible.stats import wilson_interval
 from crucible.synthetic_stepwise import StepRewardPRM, StepwisePolicy
 from crucible.verify import (
+    CodeOutcomeVerifier,
     MathOutcomeVerifier,
     MockProcessVerifier,
     PRMVerifier,
@@ -76,7 +78,12 @@ def build_policy(config: RunConfig) -> PolicyModel:
             step_accuracy=config.step_accuracy, depth=config.step_depth, seed=config.seed
         )
     if backend == "ollama":
-        return OllamaPolicy(config.policy.model, max_step_tokens=config.max_step_tokens)
+        prompt_builder = build_code_prompt if config.dataset in CODE_DATASETS else build_cot_prompt
+        return OllamaPolicy(
+            config.policy.model,
+            max_step_tokens=config.max_step_tokens,
+            prompt_builder=prompt_builder,
+        )
     if backend == "hosted":
         raise NotImplementedError(
             "the hosted OpenAI-compatible backend lands in a later milestone; "
@@ -86,7 +93,15 @@ def build_policy(config: RunConfig) -> PolicyModel:
 
 
 def build_outcome_verifier(config: RunConfig) -> OutcomeVerifier:
-    """M0–M4: math only. The code-execution verifier (M5) will select on dataset here."""
+    """Math equivalence for math datasets; sandboxed execution for code datasets."""
+    if config.dataset in CODE_DATASETS:
+        if not config.allow_code_execution:
+            raise RuntimeError(
+                f"dataset '{config.dataset}' runs model-generated code, which is OFF by "
+                "default. Pass --allow-code-exec to enable the locked-down sandbox "
+                "(isolated subprocess, hard timeout, no network, scratch temp dir)."
+            )
+        return CodeOutcomeVerifier(allow_execution=True, timeout=config.code_timeout)
     return MathOutcomeVerifier()
 
 
@@ -109,6 +124,7 @@ def run(config: RunConfig) -> RunSummary:
     process = build_process_verifier(config)
     strategy = get_strategy(config.method)
 
+    is_code = config.dataset in CODE_DATASETS
     summary = RunSummary(config=config)
     for problem in problems:
         t0 = time.perf_counter()
@@ -122,7 +138,8 @@ def run(config: RunConfig) -> RunSummary:
                 method=config.method,
                 dataset=config.dataset,
                 correct=verdict.correct,
-                predicted=extract_final_answer(chosen.text),
+                # For code, "predicted" (a math answer) is meaningless — report None.
+                predicted=None if is_code else extract_final_answer(chosen.text),
                 gold=problem.answer,
                 compute=compute,
                 difficulty=problem.difficulty,

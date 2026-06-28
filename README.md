@@ -9,12 +9,13 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **M0 shipped; M1–M4 built.** The engine runs end-to-end offline, runs real
-pass@1 on GSM8K/MATH-500 via a local Ollama server (M1, awaiting a live test), produces
-the **accuracy-vs-compute curve** for best-of-N (M2), exposes the **PRM selection gap**
-(majority/PRM/oracle on the same samples, M3), and runs **PRM-guided beam search** that
-beats best-of-N at matched compute (M4) — M2–M4 self-verified on synthetic backends. See
-[ROADMAP.md](ROADMAP.md) and [PROGRESS.md](PROGRESS.md). Next: M5 (the code track).
+**Status:** **M0 shipped; M1–M5 built.** The engine runs end-to-end offline, runs real
+pass@1 on GSM8K/MATH-500 via Ollama (M1, awaiting a live test), produces the
+**accuracy-vs-compute curve** for best-of-N (M2), exposes the **PRM selection gap** (M3),
+runs **PRM-guided beam search** that beats best-of-N at matched compute (M4), and adds a
+**code track** with a sandboxed (opt-in) execution verifier + HumanEval/MBPP (M5) —
+M2–M5 self-verified on synthetic/bundled backends. See [ROADMAP.md](ROADMAP.md) and
+[PROGRESS.md](PROGRESS.md). Next: M6 (MCTS over reasoning steps).
 
 ---
 
@@ -66,6 +67,13 @@ stepwise task, offline:
 python -m crucible sweep configs/beam-sweep.yaml   # beam line beats best-of-N on the curve
 ```
 
+**The code track (M5):** execute model-generated code against unit tests in a
+locked-down sandbox. Execution is **off by default** — pass `--allow-code-exec`:
+
+```powershell
+python -m crucible run --dataset code-sample --policy mock --allow-code-exec   # 2/3
+```
+
 ### Commands
 
 | Command | What it does |
@@ -74,6 +82,7 @@ python -m crucible sweep configs/beam-sweep.yaml   # beam line beats best-of-N o
 | `crucible report <run_dir>` | Print the metrics from a past run |
 | `crucible sweep <config.yaml>` | Grid → the accuracy-vs-compute curve (M2) |
 | `crucible compare` | Majority/PRM/oracle on the same samples → the selection gap (M3) |
+| `crucible run --dataset code-sample --allow-code-exec` | Code track: sandboxed execution (M5) |
 | `crucible version` | Print the version |
 | `ruff check .` · `mypy src` · `pytest` | Lint · typecheck · tests |
 

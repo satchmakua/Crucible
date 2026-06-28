@@ -79,11 +79,18 @@ unchecked milestone.
 
 ## Phase 2 — Code, then the hardest search
 
-- [ ] **M5 — Code track.** A sandboxed code-execution `OutcomeVerifier` (subprocess,
-  hard timeout, no network, temp dir) + HumanEval/MBPP loaders; run best-of-N/beam
-  with execution feedback. Proves the verifier abstraction generalizes math → code.
-  **Test:** `crucible run --dataset humaneval --method best_of_n ...` reports pass@1
-  and best-of-N from real test execution, with the sandbox enforced.
+- [ ] **M5 — Code track.** A sandboxed code-execution `OutcomeVerifier` (isolated
+  subprocess, hard timeout, no network, scratch temp dir; **opt-in**) + HumanEval/MBPP
+  loaders; run best-of-N with execution feedback. Proves the verifier abstraction
+  generalizes math → code (see `docs/adr/0003-…`).
+  _(Built and self-verified 2026-06-28 — the sandbox passes good code and contains
+  wrong/raising/looping/network-touching code; the gate blocks code datasets unless
+  `--allow-code-exec`. Run real HumanEval, then check this box.)_
+  **Test (offline, runs cold):** `crucible run --dataset code-sample --policy mock
+  --allow-code-exec` → pass@1 = 2/3 from real execution (and without the flag it
+  refuses, exit 1). **Real-model variant:** `crucible run --dataset humaneval --method
+  best_of_n --selection oracle --policy ollama --model <m> --allow-code-exec` (needs the
+  `datasets` extra) reports pass@1 + best-of-N from real test execution.
 
 - [ ] **M6 — MCTS over reasoning steps.** UCT/PUCT with the PRM as value:
   selection / expansion / rollout / backup. Compare MCTS vs beam vs best-of-N at

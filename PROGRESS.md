@@ -5,8 +5,8 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** M1–M4 built (M1 awaits a live-Ollama test; M2–M4 self-verified cold).
-Next up: **M5** (the code track — sandboxed execution verifier + HumanEval/MBPP).
+**Current phase:** M1–M5 built (M1 awaits a live-Ollama test; M2–M5 self-verified cold).
+Next up: **M6** (MCTS over reasoning steps — the headline method).
 
 ## State of the tree
 
@@ -25,14 +25,14 @@ Next up: **M5** (the code track — sandboxed execution verifier + HumanEval/MBP
 | Answer extraction | `verify/answer_extract.py` | ✅ M0 |
 | Math outcome verifier | `verify/math_outcome.py` | ✅ M0 |
 | PRM: mock + real adapters | `verify/process.py` | ✅ M3 (real PRM unrun) |
-| Code-execution verifier | `verify/` | ⬜ M5 |
+| Code sandbox + outcome verifier | `verify/code_sandbox.py`, `verify/code_outcome.py` | ✅ M5 (opt-in) |
 | pass1 strategy + registry | `search/` | ✅ M0 |
 | best_of_n + selectors (maj/oracle/prm) | `search/best_of_n.py`, `search/selectors.py` | ✅ M3 |
 | beam / DVTS | `search/beam.py` | ✅ M4 |
 | mcts | `search/` | ⬜ M6 |
 | Sample dataset + registry | `data/` | ✅ M0 |
 | GSM8K + MATH-500 loaders | `data/hf.py` | ✅ M1 |
-| Code dataset loaders (HumanEval/MBPP) | `data/` | ⬜ M5 |
+| Code datasets: bundled + HumanEval/MBPP | `data/code_sample.py`, `data/hf.py` | ✅ M5 |
 | Experiment runner | `runner.py` | ✅ M0 |
 | Run records (JSON/CSV) + summary | `report.py` | ✅ M0 |
 | Sweep + accuracy-vs-compute curve | `sweep.py`, `report.py` | ✅ M2 |
@@ -40,6 +40,40 @@ Next up: **M5** (the code track — sandboxed execution verifier + HumanEval/MBP
 | CLI (run/report/sweep/compare/version) | `cli.py` | ✅ M3 (all real) |
 
 ---
+
+## M5 — Code track (sandboxed execution) · built 2026-06-28 · self-verified cold
+
+The verifier abstraction generalizes from math to code — same `OutcomeVerifier` port,
+"correct" now means *passing unit tests under execution* instead of symbolic equivalence.
+
+**What shipped:**
+- **`code_sandbox.run_in_sandbox`**: runs candidate + tests in an isolated subprocess
+  (`python -I`), hard wall-clock timeout (kills on expiry), scratch temp dir as cwd,
+  scrubbed env (proxy vars dropped), and an injected preamble that disables network
+  (neuters `socket`) and caps CPU on POSIX. Guardrail, **not** a jail — see
+  `docs/adr/0003-code-execution-sandbox.md`.
+- **`CodeOutcomeVerifier`** (extracts the ```python block, runs the sandbox) behind the
+  same port as the math verifier; **opt-in** (`allow_code_execution`). The runner
+  **fails fast** on a code dataset unless `--allow-code-exec` is passed.
+- **Datasets**: a bundled `code-sample` (3 problems + scripted solutions) and
+  HuggingFace **HumanEval** / **MBPP** loaders (HumanEval `test` + `check(entry_point)`
+  folded into the test tuple; MBPP `test_list`). Ollama uses a code-specific prompt for
+  code datasets. `predicted` is reported as None for code (no math answer to extract).
+
+**How it was verified (cold, no model):**
+- `ruff` clean; `mypy src` clean (36 files); `pytest` → **87 passed** (15 new).
+- Sandbox tests cover the security contract: correct code passes; wrong/raising/syntax-
+  error code fails; an infinite loop **times out**; a `socket.create_connection` is
+  **blocked**. `crucible run --dataset code-sample --policy mock --allow-code-exec` →
+  **2/3** from real execution (c1, c2 pass; c3's buggy reverse fails); without the flag
+  it refuses with a clear message (exit 1). HumanEval/MBPP row mappers tested on fixtures.
+
+**Gotchas / notes:**
+- True isolation needs Docker `--network none`/WSL2; the in-Python network/CPU guards can
+  be bypassed by native code and Windows grandchildren may outlive the timeout (ADR-0003).
+- The suite is slightly slower (~4s) because the sandbox tests spawn real subprocesses.
+- best-of-N on code should use `--selection oracle` (run tests, pick a passer); majority
+  voting on raw code isn't meaningful.
 
 ## M4 — Step segmentation + PRM-guided beam (DVTS) · built 2026-06-27 · self-verified cold
 

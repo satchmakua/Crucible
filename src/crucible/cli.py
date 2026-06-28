@@ -63,6 +63,9 @@ def run(
         str | None, typer.Option(help="PRM id for selection=prm ('mock' = simulator)")
     ] = None,
     prm_accuracy: Annotated[float, typer.Option(help="skill of the mock PRM")] = 0.8,
+    allow_code_exec: Annotated[
+        bool, typer.Option(help="enable the code-execution sandbox (off by default)")
+    ] = False,
     config: Annotated[
         Path | None, typer.Option("--config", help="YAML config; if given, other flags are ignored")
     ] = None,
@@ -83,6 +86,7 @@ def run(
             synthetic_accuracy=synthetic_accuracy,
             prm=prm,
             prm_accuracy=prm_accuracy,
+            allow_code_execution=allow_code_exec,
             policy=PolicyConfig(
                 backend=policy, model=model, temperature=temperature, max_tokens=max_tokens
             ),
@@ -91,7 +95,7 @@ def run(
 
     try:
         summary = run_experiment(cfg)
-    except (NotImplementedError, ValueError) as exc:
+    except (NotImplementedError, ValueError, RuntimeError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
@@ -135,7 +139,7 @@ def sweep(
 
     try:
         result = run_sweep(config)
-    except (NotImplementedError, ValueError, FileNotFoundError) as exc:
+    except (NotImplementedError, ValueError, FileNotFoundError, RuntimeError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
@@ -185,7 +189,7 @@ def compare(
     )
     try:
         summaries = run_comparison(cfg)
-    except (NotImplementedError, ValueError) as exc:
+    except (NotImplementedError, ValueError, RuntimeError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
