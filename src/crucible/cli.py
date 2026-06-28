@@ -22,14 +22,17 @@ from rich.console import Console
 from crucible import __version__
 from crucible.config import PolicyConfig, RunConfig
 from crucible.report import (
+    print_comparison,
     print_record,
     print_summary,
     print_sweep,
     read_summary,
     render_curve,
+    write_comparison_record,
     write_run_record,
 )
 from crucible.runner import run as run_experiment
+from crucible.runner import run_comparison
 
 app = typer.Typer(
     add_completion=False,
@@ -56,6 +59,10 @@ def run(
     synthetic_accuracy: Annotated[
         float, typer.Option(help="per-problem correctness for --policy synthetic")
     ] = 0.5,
+    prm: Annotated[
+        str | None, typer.Option(help="PRM id for selection=prm ('mock' = simulator)")
+    ] = None,
+    prm_accuracy: Annotated[float, typer.Option(help="skill of the mock PRM")] = 0.8,
     config: Annotated[
         Path | None, typer.Option("--config", help="YAML config; if given, other flags are ignored")
     ] = None,
@@ -74,6 +81,8 @@ def run(
             seed=seed,
             limit=limit,
             synthetic_accuracy=synthetic_accuracy,
+            prm=prm,
+            prm_accuracy=prm_accuracy,
             policy=PolicyConfig(
                 backend=policy, model=model, temperature=temperature, max_tokens=max_tokens
             ),
@@ -138,6 +147,57 @@ def sweep(
     print_sweep(result.cells, console)
     console.print(f"[green]curve:[/green] {result.curve_path}")
     console.print(f"[green]sweep:[/green] {result.sweep_dir}")
+
+
+@app.command()
+def compare(
+    dataset: Annotated[str, typer.Option(help="dataset name")] = "sample",
+    policy: Annotated[str, typer.Option(help="inference backend: mock | synthetic | ollama")] = "synthetic",
+    model: Annotated[str, typer.Option(help="policy model id")] = "sim",
+    n: Annotated[int, typer.Option(help="samples per problem")] = 8,
+    prm: Annotated[str, typer.Option(help="PRM id ('mock' = simulator)")] = "mock",
+    prm_accuracy: Annotated[float, typer.Option(help="skill of the mock PRM (illustrative)")] = 0.3,
+    synthetic_accuracy: Annotated[float, typer.Option(help="accuracy for --policy synthetic")] = 0.3,
+    temperature: Annotated[float, typer.Option(help="sampling temperature")] = 0.7,
+    max_tokens: Annotated[int, typer.Option(help="max tokens per generation")] = 1024,
+    limit: Annotated[int | None, typer.Option(help="cap the number of problems")] = None,
+    seed: Annotated[int, typer.Option(help="random seed")] = 0,
+    output_dir: Annotated[Path, typer.Option(help="where records are written")] = Path("runs"),
+    save: Annotated[bool, typer.Option(help="write records + comparison.png")] = True,
+) -> None:
+    """Compare majority / PRM / oracle selection on the SAME best-of-N samples.
+
+    Exposes the PRM's selection gap: with a real PRM, oracle >= prm >= majority.
+    """
+    cfg = RunConfig(
+        method="best_of_n",
+        dataset=dataset,
+        n=n,
+        seed=seed,
+        limit=limit,
+        prm=prm,
+        prm_accuracy=prm_accuracy,
+        synthetic_accuracy=synthetic_accuracy,
+        policy=PolicyConfig(
+            backend=policy, model=model, temperature=temperature, max_tokens=max_tokens
+        ),
+        output_dir=str(output_dir),
+    )
+    try:
+        summaries = run_comparison(cfg)
+    except (NotImplementedError, ValueError) as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(
+            f"[red]error:[/red] inference backend unreachable ({type(exc).__name__}). {exc}"
+        )
+        raise typer.Exit(code=1) from exc
+
+    print_comparison(summaries, console)
+    if save:
+        comp_dir = write_comparison_record(summaries)
+        console.print(f"[green]comparison:[/green] {comp_dir}")
 
 
 @app.command()

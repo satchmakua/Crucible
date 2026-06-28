@@ -9,16 +9,22 @@ no backend or dataset library is imported here directly.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from crucible.config import RunConfig
 from crucible.data import load_dataset, scripts_for
-from crucible.domain.ports import OutcomeVerifier, PolicyModel
+from crucible.domain.ports import OutcomeVerifier, PolicyModel, ProcessVerifier
 from crucible.domain.types import Compute, Result
 from crucible.inference import OllamaPolicy, ScriptedPolicy, SyntheticPolicy
 from crucible.search import get_strategy
+from crucible.search.selectors import SELECTORS
 from crucible.stats import wilson_interval
-from crucible.verify import MathOutcomeVerifier, extract_final_answer
+from crucible.verify import (
+    MathOutcomeVerifier,
+    MockProcessVerifier,
+    PRMVerifier,
+    extract_final_answer,
+)
 
 
 @dataclass
@@ -75,8 +81,17 @@ def build_policy(config: RunConfig) -> PolicyModel:
 
 
 def build_outcome_verifier(config: RunConfig) -> OutcomeVerifier:
-    """M0: math only. The code-execution verifier (M5) selects on dataset here."""
+    """M0–M4: math only. The code-execution verifier (M5) will select on dataset here."""
     return MathOutcomeVerifier()
+
+
+def build_process_verifier(config: RunConfig) -> ProcessVerifier | None:
+    """The PRM, if requested. `--prm mock` is the seeded simulator; else a real PRM."""
+    if not config.prm:
+        return None
+    if config.prm == "mock":
+        return MockProcessVerifier(accuracy=config.prm_accuracy, seed=config.seed)
+    return PRMVerifier(config.prm)
 
 
 def run(config: RunConfig) -> RunSummary:
@@ -84,12 +99,13 @@ def run(config: RunConfig) -> RunSummary:
     problems = load_dataset(config.dataset, limit=config.limit)
     policy = build_policy(config)
     outcome = build_outcome_verifier(config)
+    process = build_process_verifier(config)
     strategy = get_strategy(config.method)
 
     summary = RunSummary(config=config)
     for problem in problems:
         t0 = time.perf_counter()
-        chosen = strategy.search(problem, policy, outcome, None, config)
+        chosen = strategy.search(problem, policy, outcome, process, config)
         verdict = outcome.verify(problem, chosen)
         elapsed = time.perf_counter() - t0
         compute = chosen.compute + Compute(verifier_forward_calls=1, wall_seconds=elapsed)
@@ -106,3 +122,57 @@ def run(config: RunConfig) -> RunSummary:
             )
         )
     return summary
+
+
+def run_comparison(config: RunConfig) -> dict[str, RunSummary]:
+    """Generate N samples per problem *once*, then score with every selector.
+
+    This is the honest selection-gap experiment: majority, oracle, and (if a PRM is
+    configured) prm all see the *same* samples, so their accuracy differences are real,
+    not an artifact of independent sampling. Each selector's results carry the shared
+    generation compute plus that selector's own selection cost.
+    """
+    problems = load_dataset(config.dataset, limit=config.limit)
+    policy = build_policy(config)
+    outcome = build_outcome_verifier(config)
+    process = build_process_verifier(config)
+
+    names = ["majority", "oracle"] + (["prm"] if process is not None else [])
+    summaries = {
+        name: RunSummary(config=replace(config, method="best_of_n", selection=name))
+        for name in names
+    }
+
+    n = max(1, config.n)
+    for problem in problems:
+        traces = policy.sample_full(
+            problem,
+            n=n,
+            temperature=config.policy.temperature,
+            max_tokens=config.policy.max_tokens,
+        )
+        if not traces:
+            continue
+        gen = Compute()
+        for trace in traces:
+            gen = gen + trace.compute
+
+        for name in names:
+            chosen, sel_compute = SELECTORS[name](
+                problem, traces, outcome, process, aggregate=config.prm_aggregate
+            )
+            verdict = outcome.verify(problem, chosen)
+            compute = gen + sel_compute + Compute(verifier_forward_calls=1)
+            summaries[name].results.append(
+                Result(
+                    problem_id=problem.id,
+                    method="best_of_n",
+                    dataset=config.dataset,
+                    correct=verdict.correct,
+                    predicted=extract_final_answer(chosen.text),
+                    gold=problem.answer,
+                    compute=compute,
+                    difficulty=problem.difficulty,
+                )
+            )
+    return summaries

@@ -52,12 +52,16 @@ class SyntheticPolicy:
         gold = problem.answer
         rng = random.Random(f"{self.seed}:{problem.id}")
         traces: list[Trace] = []
-        for _ in range(n):
+        for i in range(n):
+            # A per-sample nonce makes each attempt's text distinct (the boxed answer
+            # still drives extraction), so a downstream PRM scores candidates
+            # individually rather than seeing N identical strings.
+            nonce = f"Attempt {i + 1}.\n\n"
             if gold is not None and rng.random() < self.accuracy:
-                text = _CORRECT.format(ans=gold)
+                text = nonce + _CORRECT.format(ans=gold)
             else:
                 ans = self._distractor(gold) if gold is not None else "0"
-                text = _WRONG.format(ans=ans)
+                text = nonce + _WRONG.format(ans=ans)
             traces.append(self._trace(text))
         return traces
 

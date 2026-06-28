@@ -36,7 +36,9 @@ class RunConfig:
     seed: int = 0
     synthetic_accuracy: float = 0.5  # per-problem correctness for the synthetic backend
     policy: PolicyConfig = field(default_factory=PolicyConfig)
-    prm: str | None = None  # process-reward model id (M3+)
+    prm: str | None = None  # process-reward model id ("mock" for the seeded simulator)
+    prm_accuracy: float = 0.8  # skill of the mock PRM (1.0 ≈ oracle, 0.5 ≈ random)
+    prm_aggregate: str = "mean"  # how to reduce per-step PRM scores: mean | min | last | prod
     segmentation: str = "double_newline"
     max_step_tokens: int = 512
     budget_tokens: int | None = None

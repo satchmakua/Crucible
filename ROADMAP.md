@@ -56,10 +56,14 @@ unchecked milestone.
   variant:** point a sweep at `dataset: gsm8k`, `backend: ollama` (needs M1's setup).
 
 - [ ] **M3 — PRM integration (learned verifier).** Add a `ProcessVerifier` adapter for
-  an open PRM (transformers/`prm` extra); **PRM-weighted best-of-N**; report
-  PRM-selected vs majority vs oracle (exposes the PRM selection gap).
-  **Test:** `crucible run --method best_of_n --prm <prm-id> ...` reports all three
-  selection lines on MATH-500; oracle ≥ PRM ≥ majority is visible.
+  an open PRM (transformers/`prm` extra); **PRM-weighted best-of-N**; the `compare`
+  path scores majority / PRM / oracle on the *same* samples to expose the selection gap.
+  _(Built and self-verified 2026-06-27 with a mock PRM — `comparison.png` shows
+  oracle ≥ prm ≥ majority with PRM compute counted; run a real PRM, then check this box.)_
+  **Test (offline, runs cold):** `crucible compare` → a table + `comparison.png` where
+  **oracle ≥ prm ≥ majority** and the prm bar costs more tokens/problem (its forward
+  passes counted). **Real-model variant:** `crucible compare --policy ollama --model
+  <m> --dataset gsm8k --prm <qwen-prm-id>` (needs the `prm` extra + a GPU).
 
 - [ ] **M4 — Step segmentation + beam/DVTS.** Use the step abstraction for real:
   PRM-guided beam search (Diverse Verifier Tree Search). Plot beam vs best-of-N at

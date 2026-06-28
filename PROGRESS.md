@@ -5,8 +5,8 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** M1 + M2 built (M1 awaits a live-Ollama test; M2 self-verified cold).
-Next up: **M3** (PRM integration — the learned process verifier).
+**Current phase:** M1–M3 built (M1 awaits a live-Ollama test; M2 + M3 self-verified
+cold). Next up: **M4** (step segmentation + PRM-guided beam / DVTS).
 
 ## State of the tree
 
@@ -23,10 +23,10 @@ Next up: **M3** (PRM integration — the learned process verifier).
 | Math CoT prompt builder | `prompts.py` | ✅ M1 |
 | Answer extraction | `verify/answer_extract.py` | ✅ M0 |
 | Math outcome verifier | `verify/math_outcome.py` | ✅ M0 |
-| PRM (process verifier) | `verify/` | ⬜ M3 |
+| PRM: mock + real adapters | `verify/process.py` | ✅ M3 (real PRM unrun) |
 | Code-execution verifier | `verify/` | ⬜ M5 |
 | pass1 strategy + registry | `search/` | ✅ M0 |
-| best_of_n (majority/oracle) | `search/best_of_n.py` | ✅ M2 |
+| best_of_n + selectors (maj/oracle/prm) | `search/best_of_n.py`, `search/selectors.py` | ✅ M3 |
 | beam / mcts | `search/` | ⬜ M4 / M6 |
 | Sample dataset + registry | `data/` | ✅ M0 |
 | GSM8K + MATH-500 loaders | `data/hf.py` | ✅ M1 |
@@ -34,9 +34,50 @@ Next up: **M3** (PRM integration — the learned process verifier).
 | Experiment runner | `runner.py` | ✅ M0 |
 | Run records (JSON/CSV) + summary | `report.py` | ✅ M0 |
 | Sweep + accuracy-vs-compute curve | `sweep.py`, `report.py` | ✅ M2 |
-| CLI (run/report/sweep/version) | `cli.py` | ✅ M2 (all real) |
+| Selection-gap comparison + bar chart | `runner.run_comparison`, `report.py` | ✅ M3 |
+| CLI (run/report/sweep/compare/version) | `cli.py` | ✅ M3 (all real) |
 
 ---
+
+## M3 — PRM integration + the selection gap · built 2026-06-27 · self-verified cold
+
+The learned verifier and the honest selection-gap comparison the whole project is
+built to expose (DESIGN.md §4.4).
+
+**What shipped:**
+- **`ProcessVerifier` adapters** (`verify/process.py`): `MockProcessVerifier` (seeded,
+  imperfect signal — correct traces score higher with noise, skill set by
+  `prm_accuracy`) and `PRMVerifier` (real open PRM via `transformers`, lazy, `prm`
+  extra; targets the Qwen-PRM convention, flagged to verify on first real run).
+  `aggregate_scores` (mean/min/last/prod) reduces per-step scores.
+- **Selectors** (`search/selectors.py`): `majority` / `oracle` / `prm`, each returning
+  the chosen trace + its own selection compute. `best_of_n` was refactored to use them
+  (so `--selection prm` works) — M2's curve path is unchanged.
+- **PRM compute is counted**: `select_prm` adds a verifier forward call *and the trace's
+  tokens* per candidate, so the PRM line costs more on the compute axis (the honesty
+  point made concrete).
+- **Same-samples comparison** (`runner.run_comparison`): generate N once per problem,
+  then score with every selector — so majority/PRM/oracle differences are real, not a
+  sampling artifact. New `crucible compare` command → a table + `comparison.png` bar
+  chart; `crucible run`/sweeps gained `--prm`/`--prm-accuracy`.
+- The synthetic policy now stamps each sample with an attempt nonce so candidates have
+  distinct text (a PRM scores them individually rather than seeing N identical strings).
+
+**How it was verified (cold, no model):**
+- `ruff` clean; `mypy src` clean (30 files); `pytest` → **64 passed** (11 new).
+- `crucible compare` (defaults: synthetic@0.3, mock-PRM@0.3, N=8) produces the textbook
+  ordering **oracle 83% ≥ prm 67% ≥ majority 17%** with the PRM bar at 400 vs 200
+  tokens/problem (its forward passes counted). Tests assert the structural invariants:
+  oracle upper-bounds the others, a perfect PRM equals oracle, all selectors share
+  identical generation compute, and PRM adds verifier tokens while majority adds none.
+
+**Gotchas / notes:**
+- best-of-N saturates: with many correct samples even a weak PRM ≈ oracle, so the *gap*
+  only shows when correct samples are scarce (low policy accuracy / fewer N) — the demo
+  defaults are tuned for that. Real gaps show on hard problems with a real PRM.
+- The real `PRMVerifier` tensor wiring is model-specific and **unrun here** (no GPU);
+  treat it like the Ollama adapter — structurally complete, confirm on first real use.
+- The three-line *curve* (gap vs compute) and per-difficulty analysis are M7's report.
 
 ## M2 — Best-of-N + the accuracy-vs-compute curve · built 2026-06-27 · self-verified cold
 

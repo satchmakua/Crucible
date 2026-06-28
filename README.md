@@ -9,11 +9,12 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **M0 shipped; M1 + M2 built.** The engine runs end-to-end offline, can run
-real pass@1 on GSM8K/MATH-500 through a local Ollama server (M1, awaiting a live test),
-and produces the headline **accuracy-vs-compute curve** for best-of-N search (M2,
-self-verified on a synthetic backend). See [ROADMAP.md](ROADMAP.md) for the plan and
-[PROGRESS.md](PROGRESS.md) for what's done. Next: M3 (PRM — the learned verifier).
+**Status:** **M0 shipped; M1–M3 built.** The engine runs end-to-end offline, runs real
+pass@1 on GSM8K/MATH-500 via a local Ollama server (M1, awaiting a live test), produces
+the headline **accuracy-vs-compute curve** for best-of-N (M2), and compares
+majority/PRM/oracle selection on the same samples to expose the **PRM selection gap**
+(M3) — M2 and M3 self-verified on synthetic backends. See [ROADMAP.md](ROADMAP.md) and
+[PROGRESS.md](PROGRESS.md). Next: M4 (step segmentation + PRM-guided beam search).
 
 ---
 
@@ -51,13 +52,21 @@ model needed — it uses a synthetic policy):
 python -m crucible sweep configs/sample-sweep.yaml   # writes runs/sweep-*/curve.png
 ```
 
+**The PRM selection gap (M3):** compare majority / PRM / oracle selection on the *same*
+best-of-N samples (offline, mock PRM):
+
+```powershell
+python -m crucible compare   # writes runs/compare-*/comparison.png (oracle >= prm >= majority)
+```
+
 ### Commands
 
 | Command | What it does |
 |---|---|
 | `crucible run [...]` | Run one experiment (method × dataset × backend) and report it |
 | `crucible report <run_dir>` | Print the metrics from a past run |
-| `crucible sweep <config.yaml>` | Grid → the accuracy-vs-compute curve _(lands in M2)_ |
+| `crucible sweep <config.yaml>` | Grid → the accuracy-vs-compute curve (M2) |
+| `crucible compare` | Majority/PRM/oracle on the same samples → the selection gap (M3) |
 | `crucible version` | Print the version |
 | `ruff check .` · `mypy src` · `pytest` | Lint · typecheck · tests |
 

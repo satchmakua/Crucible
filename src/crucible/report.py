@@ -215,3 +215,91 @@ def render_curve(cells: list[dict[str, Any]], out_path: str | Path) -> Path:
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
     return out_path
+
+
+# --- Selection-gap comparison (M3) -------------------------------------------
+
+_SELECTOR_ORDER = ("majority", "prm", "oracle")
+
+
+def _ordered(summaries: dict[str, RunSummary]) -> list[str]:
+    return [name for name in _SELECTOR_ORDER if name in summaries]
+
+
+def print_comparison(summaries: dict[str, RunSummary], console: Console | None = None) -> None:
+    """Print majority / prm / oracle accuracy on the same samples + gap to oracle."""
+    console = console or Console()
+    oracle_acc = summaries["oracle"].accuracy if "oracle" in summaries else 0.0
+    table = Table(title="selection gap: best-of-N (same samples)", title_style="bold")
+    table.add_column("selector")
+    table.add_column("accuracy", justify="right")
+    table.add_column("95% CI", justify="center")
+    table.add_column("gap to oracle", justify="right")
+    table.add_column("tokens/problem", justify="right")
+    for name in _ordered(summaries):
+        s = summaries[name]
+        low, high = s.accuracy_ci
+        denom = s.total or 1
+        table.add_row(
+            name,
+            f"{s.accuracy:.1%}  ({s.correct}/{s.total})",
+            f"[{low:.0%}, {high:.0%}]",
+            f"{oracle_acc - s.accuracy:+.1%}",
+            f"{s.total_compute.total_tokens / denom:.0f}",
+        )
+    console.print(table)
+
+
+def render_comparison(summaries: dict[str, RunSummary], out_path: str | Path) -> Path:
+    """Bar chart of accuracy per selector (same samples), with Wilson error bars."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    names = _ordered(summaries)
+    accs = [summaries[n].accuracy for n in names]
+    cis = [summaries[n].accuracy_ci for n in names]
+    yerr_lo = [max(0.0, a - lo) for a, (lo, _hi) in zip(accs, cis, strict=True)]
+    yerr_hi = [max(0.0, hi - a) for a, (_lo, hi) in zip(accs, cis, strict=True)]
+    colors = ["#4C78A8", "#F58518", "#54A24B"][: len(names)]
+
+    fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    ax.bar(names, accs, yerr=[yerr_lo, yerr_hi], capsize=4, color=colors)
+    for i, a in enumerate(accs):
+        ax.text(i, min(a + 0.03, 0.99), f"{a:.0%}", ha="center")
+    ax.set_ylim(0.0, 1.0)
+    ax.set_ylabel("accuracy")
+    ax.set_title("Selection gap (best-of-N, same samples)")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path
+
+
+def write_comparison_record(
+    summaries: dict[str, RunSummary], base_dir: str | Path | None = None
+) -> Path:
+    """Write per-selector records + comparison.json + comparison.png; return the dir."""
+    any_cfg = next(iter(summaries.values())).config
+    root = Path(base_dir) if base_dir is not None else Path(any_cfg.output_dir)
+    comp_dir = root / datetime.now().strftime("compare-%Y-%m-%dT%H-%M-%S")
+    comp_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics: dict[str, Any] = {}
+    for name, summary in summaries.items():
+        write_run_record(summary, base_dir=comp_dir, name=name)
+        low, high = summary.accuracy_ci
+        denom = summary.total or 1
+        metrics[name] = {
+            "accuracy": summary.accuracy,
+            "correct": summary.correct,
+            "total": summary.total,
+            "accuracy_ci_low": low,
+            "accuracy_ci_high": high,
+            "mean_tokens": summary.total_compute.total_tokens / denom,
+        }
+    (comp_dir / "comparison.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    render_comparison(summaries, comp_dir / "comparison.png")
+    return comp_dir
