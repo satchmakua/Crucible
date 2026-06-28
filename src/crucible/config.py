@@ -32,7 +32,9 @@ class RunConfig:
     dataset: str = "sample"  # sample | gsm8k | math500 | humaneval | mbpp
     limit: int | None = None  # cap number of problems (None = all)
     n: int = 1  # samples per problem (best_of_n etc.)
+    selection: str = "majority"  # best_of_n selector: majority | oracle (PRM in M3)
     seed: int = 0
+    synthetic_accuracy: float = 0.5  # per-problem correctness for the synthetic backend
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     prm: str | None = None  # process-reward model id (M3+)
     segmentation: str = "double_newline"

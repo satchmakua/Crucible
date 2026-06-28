@@ -36,6 +36,8 @@ unchecked milestone.
 - [ ] **M1 — Ollama backend + real pass@1 on GSM8K.** Wire the real `OllamaPolicy`
   into the run loop and load GSM8K via the HuggingFace `datasets` extra. Generate one
   CoT per problem, extract + verify, report pass@1 on ~10–50 problems.
+  _(Built and unit-tested 2026-06-27 against a mocked transport; run the Test below to
+  confirm against a live server, then check this box.)_
   **Test:** with Ollama running and a small instruct model pulled (e.g.
   `qwen2.5-math-1.5b-instruct`), `crucible run --method pass1 --dataset gsm8k
   --policy ollama --model <m> --limit 20` prints a pass@1 with a Wilson CI and writes

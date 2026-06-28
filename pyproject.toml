@@ -89,5 +89,6 @@ warn_unused_configs = true
 module = [
     "math_verify.*",
     "sympy.*",
+    "datasets.*",
 ]
 ignore_missing_imports = true

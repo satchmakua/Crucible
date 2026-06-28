@@ -5,7 +5,8 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** Phase 0 complete (M0). Next up: **M1** (Ollama + GSM8K pass@1).
+**Current phase:** M1 built (awaiting the human's live-Ollama test). Next up: **M2**
+(best-of-N + the accuracy-vs-compute curve).
 
 ## State of the tree
 
@@ -17,7 +18,8 @@ acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 | Step segmentation + token approx | `segment.py` | ✅ M0 (used fully in M4) |
 | Wilson CIs | `stats.py` | ✅ M0 |
 | Mock policy (ScriptedPolicy) | `inference/mock.py` | ✅ M0 |
-| Ollama policy | `inference/ollama.py` | 🟡 written, wired in M1 |
+| Ollama policy | `inference/ollama.py` | ✅ M1 |
+| Math CoT prompt builder | `prompts.py` | ✅ M1 |
 | Answer extraction | `verify/answer_extract.py` | ✅ M0 |
 | Math outcome verifier | `verify/math_outcome.py` | ✅ M0 |
 | PRM (process verifier) | `verify/` | ⬜ M3 |
@@ -25,13 +27,52 @@ acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 | pass1 strategy + registry | `search/` | ✅ M0 |
 | best_of_n / beam / mcts | `search/` | ⬜ M2 / M4 / M6 |
 | Sample dataset + registry | `data/` | ✅ M0 |
-| HF dataset loaders | `data/` | ⬜ M1 (GSM8K/MATH-500), M5 (code) |
+| GSM8K + MATH-500 loaders | `data/hf.py` | ✅ M1 |
+| Code dataset loaders (HumanEval/MBPP) | `data/` | ⬜ M5 |
 | Experiment runner | `runner.py` | ✅ M0 |
 | Run records (JSON/CSV) + summary | `report.py` | ✅ M0 |
 | Accuracy-vs-compute curve | `report.py` | ⬜ M2 |
 | CLI (run/report/sweep/version) | `cli.py` | ✅ M0 (sweep stubbed → M2) |
 
 ---
+
+## M1 — Ollama backend + real pass@1 on GSM8K · built 2026-06-27 · awaiting test
+
+The first real-model slice: the engine can now read GSM8K/MATH-500 from HuggingFace
+and run pass@1 through a live Ollama server — no change to the search core, just two new
+adapters (a dataset loader and the already-present `OllamaPolicy`, now wired with a
+proper prompt).
+
+**What shipped:**
+- **`prompts.build_cot_prompt`** — a zero-shot math CoT prompt that asks for the answer
+  in `\boxed{}` (designed in lockstep with the extractor).
+- **`data/hf.py`** — GSM8K (`openai/gsm8k`, `main`/`test`; gold parsed from the
+  `#### …` tail, commas/`$` stripped) and MATH-500 (`HuggingFaceH4/MATH-500`; LaTeX
+  `answer`, `level` → difficulty). `datasets` is imported lazily; row→`Problem` mapping
+  and gold extraction are pure functions. Wired into `data/registry.py`.
+- **`OllamaPolicy`** now builds the CoT prompt, reads real token counts from Ollama's
+  `eval_count` (whitespace approximation as fallback), and accepts an injectable
+  `httpx.Client` for testing.
+- **CLI** now fails *gracefully* on a down/unreachable backend (`httpx.HTTPError` →
+  one-line message, exit 1) instead of dumping a traceback.
+
+**How it was verified (without a live server):**
+- `ruff` clean; `mypy src` clean (25 files); `pytest` → **43 passed** (10 new).
+- `OllamaPolicy` is tested end-to-end against an **`httpx.MockTransport`**: correct
+  `/api/generate` payload (model, `\boxed{}` prompt, options), response parsed into a
+  `Trace` with `eval_count` tokens, and the resulting trace verified correct by the
+  math verifier. GSM8K gold extraction + row mapping tested on fixtures.
+- Live checks: `import datasets` (3.6.0) works; `crucible run --policy ollama` with no
+  server prints the clean backend error; `--dataset humaneval` returns the M5 message.
+
+**Still needs the human (the M1 acceptance test):** with Ollama running and a small
+instruct model pulled, `crucible run --method pass1 --dataset gsm8k --policy ollama
+--model <m> --limit 20` should print a real pass@1 + Wilson CI and write a record.
+
+**Gotchas:** GSM8K/MATH-500 schemas are coded from their known HuggingFace layouts and
+read defensively, but haven't been hit live here (no network) — worth a glance on the
+first real run. `--dataset gsm8k --policy mock` yields 0% (no scripted outputs); that's
+expected, mock is for the bundled `sample` set only.
 
 ## M0 — Skeleton & it runs · built 2026-06-27 · ✓ verified at scaffold
 

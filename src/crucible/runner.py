@@ -15,7 +15,7 @@ from crucible.config import RunConfig
 from crucible.data import load_dataset, scripts_for
 from crucible.domain.ports import OutcomeVerifier, PolicyModel
 from crucible.domain.types import Compute, Result
-from crucible.inference import OllamaPolicy, ScriptedPolicy
+from crucible.inference import OllamaPolicy, ScriptedPolicy, SyntheticPolicy
 from crucible.search import get_strategy
 from crucible.stats import wilson_interval
 from crucible.verify import MathOutcomeVerifier, extract_final_answer
@@ -58,6 +58,12 @@ def build_policy(config: RunConfig) -> PolicyModel:
     backend = config.policy.backend
     if backend == "mock":
         return ScriptedPolicy(scripts_for(config.dataset), max_step_tokens=config.max_step_tokens)
+    if backend == "synthetic":
+        return SyntheticPolicy(
+            accuracy=config.synthetic_accuracy,
+            seed=config.seed,
+            max_step_tokens=config.max_step_tokens,
+        )
     if backend == "ollama":
         return OllamaPolicy(config.policy.model, max_step_tokens=config.max_step_tokens)
     if backend == "hosted":

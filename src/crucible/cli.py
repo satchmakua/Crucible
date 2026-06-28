@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
 
@@ -67,6 +68,12 @@ def run(
         summary = run_experiment(cfg)
     except (NotImplementedError, ValueError) as exc:
         console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(
+            f"[red]error:[/red] could not reach the '{cfg.policy.backend}' backend "
+            f"({type(exc).__name__}). Is the server running and the model pulled? {exc}"
+        )
         raise typer.Exit(code=1) from exc
 
     if save:

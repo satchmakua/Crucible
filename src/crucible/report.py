@@ -59,10 +59,12 @@ def _summary_dict(summary: RunSummary) -> dict[str, Any]:
     }
 
 
-def write_run_record(summary: RunSummary, base_dir: str | Path | None = None) -> Path:
-    """Persist the run to `<output_dir>/<timestamp>/` and return that directory."""
+def write_run_record(
+    summary: RunSummary, base_dir: str | Path | None = None, name: str | None = None
+) -> Path:
+    """Persist the run to `<output_dir>/<name|timestamp>/` and return that directory."""
     root = Path(base_dir) if base_dir is not None else Path(summary.config.output_dir)
-    run_dir = root / datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
+    run_dir = root / (name or datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f"))
     run_dir.mkdir(parents=True, exist_ok=True)
 
     (run_dir / "config.json").write_text(

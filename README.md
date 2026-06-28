@@ -9,9 +9,10 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **M0 shipped** — the engine runs end-to-end on a bundled sample with a
-mock backend (no GPU/network). See [ROADMAP.md](ROADMAP.md) for the plan and
-[PROGRESS.md](PROGRESS.md) for what's done. Next: M1 (Ollama + GSM8K pass@1).
+**Status:** **M0 shipped; M1 built (awaiting a live-Ollama test).** The engine runs
+end-to-end offline on a bundled sample, and can now run real pass@1 on GSM8K/MATH-500
+through a local Ollama server. See [ROADMAP.md](ROADMAP.md) for the plan and
+[PROGRESS.md](PROGRESS.md) for what's done. Next: M2 (best-of-N + the lift curve).
 
 ---
 
@@ -31,6 +32,16 @@ python -m crucible run --method pass1 --dataset sample --policy mock
 
 You should see a per-problem table and a **66.7% (4/6)** pass@1 with a Wilson
 confidence interval, and a run record written under `runs/`.
+
+**Real model runs (M1):** install the dataset extra, start [Ollama](https://ollama.com)
+and pull a small instruct model, then run real pass@1 on GSM8K:
+
+```powershell
+pip install -e ".[datasets]"
+ollama pull qwen2.5-math-1.5b-instruct      # or any small instruct model
+python -m crucible run --method pass1 --dataset gsm8k --policy ollama `
+    --model qwen2.5-math-1.5b-instruct --limit 20
+```
 
 ### Commands
 

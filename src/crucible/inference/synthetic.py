@@ -1,0 +1,75 @@
+r"""SyntheticPolicy — a seeded simulator of a policy with a known accuracy.
+
+Like the mock, this is a **test/demo backend, not a real model**: given a problem's
+gold answer it fabricates a "correct" trace (`\boxed{gold}`) with probability
+`accuracy` and a "wrong" trace otherwise, using a seed derived from the run seed and
+the problem id. That makes the test-time-scaling behaviour deterministic and
+analysable — pass@1 ≈ `accuracy`, oracle@N ≈ 1-(1-accuracy)^N — so best-of-N's lift
+curve can be generated and unit-tested without a GPU or network.
+"""
+
+from __future__ import annotations
+
+import random
+
+from crucible.domain.types import Compute, Problem, Step, Trace
+from crucible.segment import approx_tokens, segment
+
+_CORRECT = (
+    "Let me work through this carefully.\n\n"
+    "Reasoning step by step about the quantities involved.\n\n"
+    "After checking the arithmetic, the final answer is \\boxed{{{ans}}}."
+)
+_WRONG = (
+    "Let me work through this carefully.\n\n"
+    "Reasoning step by step, though I may have slipped somewhere.\n\n"
+    "I'll go with the final answer \\boxed{{{ans}}}."
+)
+
+
+class SyntheticPolicy:
+    """Emits correct/incorrect traces at a configured rate (seeded, reproducible)."""
+
+    name = "synthetic"
+
+    def __init__(self, *, accuracy: float = 0.5, seed: int = 0, max_step_tokens: int = 512) -> None:
+        self.accuracy = accuracy
+        self.seed = seed
+        self._max_step_tokens = max_step_tokens
+
+    @staticmethod
+    def _distractor(gold: str) -> str:
+        return "0" if gold.strip() != "0" else "1"
+
+    def _trace(self, text: str) -> Trace:
+        steps = segment(text, max_step_tokens=self._max_step_tokens)
+        compute = Compute(policy_gen_tokens=approx_tokens(text), policy_forward_calls=1)
+        return Trace(steps=steps, final_answer=None, compute=compute)
+
+    def sample_full(
+        self, problem: Problem, *, n: int, temperature: float, max_tokens: int
+    ) -> list[Trace]:
+        gold = problem.answer
+        rng = random.Random(f"{self.seed}:{problem.id}")
+        traces: list[Trace] = []
+        for _ in range(n):
+            if gold is not None and rng.random() < self.accuracy:
+                text = _CORRECT.format(ans=gold)
+            else:
+                ans = self._distractor(gold) if gold is not None else "0"
+                text = _WRONG.format(ans=ans)
+            traces.append(self._trace(text))
+        return traces
+
+    def sample_step(
+        self,
+        problem: Problem,
+        prefix: list[Step],
+        *,
+        n: int,
+        temperature: float,
+        max_tokens: int,
+    ) -> list[Step]:
+        # Step-wise sampling isn't meaningful for this simulator; beam/MCTS (M4+) use
+        # real backends. Return empty steps so the contract is satisfied.
+        return [Step(text="", token_count=0) for _ in range(n)]

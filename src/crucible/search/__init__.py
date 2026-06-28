@@ -8,7 +8,8 @@ in later milestones (ROADMAP M2/M4/M6).
 
 from __future__ import annotations
 
+from crucible.search.best_of_n import BestOfNStrategy
 from crucible.search.pass1 import Pass1Strategy
 from crucible.search.registry import available_methods, get_strategy
 
-__all__ = ["Pass1Strategy", "available_methods", "get_strategy"]
+__all__ = ["BestOfNStrategy", "Pass1Strategy", "available_methods", "get_strategy"]

@@ -2,37 +2,44 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from crucible.data.hf import load_gsm8k, load_math500
 from crucible.data.sample import SAMPLE_PROBLEMS, SAMPLE_SCRIPTS
 from crucible.domain.types import Problem
 
-# Real datasets land in M1 via HuggingFace `datasets`; named here so the CLI can give
-# a milestone-aware message instead of a bare KeyError.
-_HF_DATASETS = {
-    "gsm8k": "M1",
-    "math500": "M1",
+# Datasets loadable now. GSM8K + MATH-500 need the `datasets` extra installed; the
+# loaders raise a clear message if it's missing.
+_LOADERS: dict[str, Callable[[int | None], list[Problem]]] = {
+    "gsm8k": load_gsm8k,
+    "math500": load_math500,
+}
+
+# Named but not yet wired, so the CLI can give a milestone-aware message.
+_PLANNED = {
     "humaneval": "M5",
     "mbpp": "M5",
 }
 
 
 def available_datasets() -> list[str]:
-    return ["sample"]
+    return ["sample", *sorted(_LOADERS)]
 
 
 def load_dataset(name: str, *, limit: int | None = None) -> list[Problem]:
     if name == "sample":
         problems = list(SAMPLE_PROBLEMS)
-    elif name in _HF_DATASETS:
+        return problems[:limit] if limit is not None else problems
+    if name in _LOADERS:
+        return _LOADERS[name](limit)
+    if name in _PLANNED:
         raise NotImplementedError(
-            f"dataset '{name}' loads via the HuggingFace `datasets` extra in milestone "
-            f"{_HF_DATASETS[name]} (see ROADMAP.md). Available now: "
-            f"{', '.join(available_datasets())}."
+            f"dataset '{name}' is planned for milestone {_PLANNED[name]} (see ROADMAP.md). "
+            f"Available now: {', '.join(available_datasets())}."
         )
-    else:
-        raise ValueError(
-            f"unknown dataset '{name}'. Available now: {', '.join(available_datasets())}."
-        )
-    return problems[:limit] if limit is not None else problems
+    raise ValueError(
+        f"unknown dataset '{name}'. Available now: {', '.join(available_datasets())}."
+    )
 
 
 def scripts_for(name: str) -> dict[str, list[str]]:
