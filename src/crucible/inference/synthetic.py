@@ -11,9 +11,27 @@ curve can be generated and unit-tested without a GPU or network.
 from __future__ import annotations
 
 import random
+from functools import cache
 
 from crucible.domain.types import Compute, Problem, Step, Trace
 from crucible.segment import approx_tokens, segment
+from crucible.verify.math_outcome import math_equal
+
+
+@cache
+def _distractor(gold: str | None) -> str:
+    """A wrong answer that is NOT math-equivalent to gold.
+
+    A literal "0" collides with a zero-equivalent gold ("0.0", "-0", "0/5") under the
+    symbolic verifier, which would score the "wrong" trace as correct. Pick the first
+    candidate the verifier does *not* equate with gold instead.
+    """
+    if gold is None:
+        return "0"
+    for candidate in ("0", "1", "2", "-1", "7"):
+        if not math_equal(candidate, gold):
+            return candidate
+    return "999999999"
 
 _CORRECT = (
     "Let me work through this carefully.\n\n"
@@ -37,10 +55,6 @@ class SyntheticPolicy:
         self.seed = seed
         self._max_step_tokens = max_step_tokens
 
-    @staticmethod
-    def _distractor(gold: str) -> str:
-        return "0" if gold.strip() != "0" else "1"
-
     def _trace(self, text: str) -> Trace:
         steps = segment(text, max_step_tokens=self._max_step_tokens)
         compute = Compute(policy_gen_tokens=approx_tokens(text), policy_forward_calls=1)
@@ -50,6 +64,7 @@ class SyntheticPolicy:
         self, problem: Problem, *, n: int, temperature: float, max_tokens: int
     ) -> list[Trace]:
         gold = problem.answer
+        distractor = _distractor(gold)
         rng = random.Random(f"{self.seed}:{problem.id}")
         traces: list[Trace] = []
         for i in range(n):
@@ -60,8 +75,7 @@ class SyntheticPolicy:
             if gold is not None and rng.random() < self.accuracy:
                 text = nonce + _CORRECT.format(ans=gold)
             else:
-                ans = self._distractor(gold) if gold is not None else "0"
-                text = nonce + _WRONG.format(ans=ans)
+                text = nonce + _WRONG.format(ans=distractor)
             traces.append(self._trace(text))
         return traces
 

@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from crucible.domain.types import Problem, Step
-from crucible.synthetic_stepwise import BAD_MARKER, GOOD_MARKER, StepRewardPRM, StepwisePolicy
+from crucible.synthetic_stepwise import (
+    BAD_MARKER,
+    GOOD_MARKER,
+    StepRewardPRM,
+    StepwisePolicy,
+    _distractor,
+)
 from crucible.verify import MathOutcomeVerifier, aggregate_scores, extract_final_answer
 
 _PROBLEM = Problem(id="p", prompt="?", answer="42")
@@ -37,3 +43,16 @@ def test_step_prm_scores_good_above_bad() -> None:
     good = aggregate_scores(prm.score_steps(_PROBLEM, [Step(f"ok {GOOD_MARKER}", 3)]))
     bad = aggregate_scores(prm.score_steps(_PROBLEM, [Step(f"no {BAD_MARKER}", 3)]))
     assert good > bad
+
+
+def test_all_flawed_trace_is_not_scored_correct_for_zero_gold() -> None:
+    # A zero-equivalent gold must not collide with the '0' distractor, or an all-BAD
+    # chain (which should be wrong) would score correct, breaking 'correct iff all good'.
+    from crucible.verify import math_equal
+
+    problem = Problem(id="z", prompt="?", answer="0.0")
+    trace = StepwisePolicy(step_accuracy=0.0, depth=4, seed=0).sample_full(
+        problem, n=1, temperature=0.0, max_tokens=8
+    )[0]
+    assert not _OUTCOME.verify(problem, trace).correct
+    assert not math_equal(_distractor("0.0"), "0.0")

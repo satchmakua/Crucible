@@ -131,7 +131,12 @@ def run(config: RunConfig) -> RunSummary:
         chosen = strategy.search(problem, policy, outcome, process, config)
         verdict = outcome.verify(problem, chosen)
         elapsed = time.perf_counter() - t0
-        compute = chosen.compute + Compute(verifier_forward_calls=1, wall_seconds=elapsed)
+        # `elapsed` already spans generation, so set wall_seconds to it rather than
+        # adding it to the per-trace generation time the strategy summed (that would
+        # double-count real Ollama runs). Token/call counts are preserved.
+        compute = replace(
+            chosen.compute + Compute(verifier_forward_calls=1), wall_seconds=elapsed
+        )
         summary.results.append(
             Result(
                 problem_id=problem.id,

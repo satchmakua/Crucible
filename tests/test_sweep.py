@@ -68,3 +68,22 @@ def test_multi_seed_sweep_pools_results(tmp_path: Path) -> None:
     cell = result.cells[0]
     assert cell["seeds"] == 3
     assert cell["total"] == 6 * 3  # 6 sample problems × 3 seeds, pooled
+
+
+def test_sweep_does_not_merge_distinct_non_knob_configs(tmp_path: Path) -> None:
+    # Sweeping a compute-affecting field that `_knob` doesn't surface (here max_tokens)
+    # must yield SEPARATE cells, not one mislabeled merged point.
+    cfg = {
+        "dataset": "sample",
+        "synthetic_accuracy": 0.5,
+        "policy": {"backend": "synthetic", "model": "sim"},
+        # max_step_tokens is a real compute-affecting field that _knob doesn't surface.
+        "grid": [{"method": "pass1", "max_step_tokens": [128, 256]}],
+        "output_dir": str(tmp_path),
+    }
+    path = tmp_path / "sweep.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    result = run_sweep(path)
+    pass1_cells = [c for c in result.cells if c["method"] == "pass1"]
+    assert len(pass1_cells) == 2  # not collapsed into one

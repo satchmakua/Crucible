@@ -45,6 +45,13 @@ class BeamStrategy:
 
         compute = Compute()
         beams: list[Trace] = [Trace(steps=[], final_answer=None, compute=Compute())]
+        # Track the best *completed* trace across all rounds. Standard beam search
+        # returns the best COMPLETED hypothesis; without this, a completed (possibly
+        # correct) trace can be dropped for a higher-PRM non-terminal partial, or the
+        # loop can exhaust its budget with only non-terminal beams and return a partial
+        # whose "answer" is a stray mid-reasoning number.
+        best_terminal: Trace | None = None
+        best_terminal_score = float("-inf")
 
         for _ in range(max(1, config.max_steps)):
             candidates: list[Trace] = []
@@ -75,12 +82,19 @@ class BeamStrategy:
                     verifier_forward_calls=1,
                     verifier_gen_tokens=sum(s.token_count for s in cand.steps),
                 )
-                scored.append((aggregate_scores(scores, config.prm_aggregate), cand))
+                score = aggregate_scores(scores, config.prm_aggregate)
+                scored.append((score, cand))
+                if _is_terminal(cand) and score > best_terminal_score:
+                    best_terminal_score, best_terminal = score, cand
 
             scored.sort(key=lambda pair: pair[0], reverse=True)
             beams = [trace for _score, trace in scored[:k]]
             if all(_is_terminal(b) for b in beams):
                 break
 
-        best = beams[0] if beams else Trace(steps=[], final_answer=None, compute=Compute())
+        # Prefer the best completed trace; only fall back to a partial if none finished.
+        if best_terminal is not None:
+            best = best_terminal
+        else:
+            best = beams[0] if beams else Trace(steps=[], final_answer=None, compute=Compute())
         return Trace(steps=best.steps, final_answer=best.final_answer, compute=compute)

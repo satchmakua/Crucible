@@ -9,14 +9,14 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **The roadmap is built (M0–M7).** Behind one policy/verifier/search interface:
-real pass@1 via Ollama (M1, awaiting a live test), **best-of-N** (M2), **PRM-weighted
-selection + the selection gap** (M3), **PRM-guided beam/DVTS** (M4), a sandboxed **code
-track** (M5), **MCTS over reasoning steps** (M6), and the **compute-optimal report** —
-multi-seed curves with CIs + the optimal-method-by-budget frontier (M7). M2–M7 are
-self-verified cold on simulators; the real-model runs (Ollama + a PRM on a GPU) are the
-remaining step. See [docs/RESULTS.md](docs/RESULTS.md), [ROADMAP.md](ROADMAP.md), and
-[PROGRESS.md](PROGRESS.md).
+**Status:** **The roadmap is built (M0–M7); M1 confirmed on a real model.** Behind one
+policy/verifier/search interface: **real pass@1 via live Ollama** (M1 — `qwen2.5:7b-instruct`
+scored 2/3 on real GSM8K), **best-of-N** (M2), **PRM-weighted selection + the selection
+gap** (M3), **PRM-guided beam/DVTS** (M4), a sandboxed **code track** (M5), **MCTS over
+reasoning steps** (M6), and the **compute-optimal report** — multi-seed curves with CIs +
+the optimal-method-by-budget frontier (M7). M2–M7 are self-verified cold on simulators;
+the remaining step is the heavier real runs (a real PRM on a GPU). See
+[docs/RESULTS.md](docs/RESULTS.md), [ROADMAP.md](ROADMAP.md), and [PROGRESS.md](PROGRESS.md).
 
 ---
 

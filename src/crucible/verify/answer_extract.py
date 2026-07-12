@@ -12,8 +12,14 @@ import re
 
 # \boxed{...} with one level of nested braces tolerated (e.g. \boxed{\frac{1}{2}}).
 _BOXED = re.compile(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}")
+# "answer is/:/= <value>" or "answer \boxed{value}". The connector (is/:/=) OR a boxed
+# prefix is REQUIRED — a bare "answer" mid-sentence ("consider the answer to this") must
+# NOT count as a final answer, or search would mistake it for a terminal trace. Real
+# instruct models often write "The final answer is 42" prose and drop \boxed, so the
+# boxed prefix must be optional (that omission was the original bug — `boxed?` only made
+# the trailing "d" optional, so plain prose never matched).
 _ANSWER_PHRASE = re.compile(
-    r"(?:final\s+answer|answer)\s*(?:is|:|=)?\s*\$?\\?boxed?\s*\{?\s*([^\n.$}]+)",
+    r"(?:final\s+answer|answer)\s*(?:(?:is|:|=)\s*|\$?\\?boxed\s*\{?\s*)\$?([^\n.$}]+)",
     re.IGNORECASE,
 )
 # Signed integers, decimals, and simple fractions like -3/4 or 1.5.
@@ -47,9 +53,11 @@ def extract_final_answer(text: str) -> str | None:
 
     phrase = _ANSWER_PHRASE.findall(text)
     if phrase:
-        cleaned = _clean(phrase[-1])
-        if cleaned:
-            return cleaned
+        value = _clean(phrase[-1])
+        if value:
+            # "the answer is 42 apples" -> "42"; non-numeric answers pass through.
+            num = _NUMBER.search(value)
+            return num.group().replace(" ", "") if num else value
 
     numbers = _NUMBER.findall(text)
     if numbers:

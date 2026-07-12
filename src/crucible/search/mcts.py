@@ -118,7 +118,11 @@ class MCTSStrategy:
                     child.value_sum = evaluate(child)
                     child.visits = 1
                     node.children.append(child)
-                value = max((c.q for c in node.children), default=evaluate(node))
+                # NB: `max(..., default=evaluate(node))` would call evaluate() eagerly
+                # every time (Python evaluates kwargs before max runs), burning — and
+                # counting — a wasted PRM forward pass. Only evaluate when there are no
+                # children.
+                value = max(c.q for c in node.children) if node.children else evaluate(node)
             else:
                 value = evaluate(node)
 

@@ -30,3 +30,21 @@ def test_empirical_accuracy_tracks_parameter() -> None:
 def test_extremes() -> None:
     assert _rate(0.0, n=50) == 0.0
     assert _rate(1.0, n=50) == 1.0
+
+
+def test_distractor_never_math_equals_gold() -> None:
+    from crucible.inference.synthetic import _distractor
+    from crucible.verify import math_equal
+
+    for gold in ("0.0", "-0", "0/5", "72", "1", "0"):
+        assert not math_equal(_distractor(gold), gold), gold
+
+
+def test_zero_equivalent_gold_scores_honestly() -> None:
+    # gold '0.0' with accuracy 0 → every trace is wrong; the distractor must not be a
+    # zero-equivalent '0' that the symbolic verifier would score correct (false 100%).
+    problem = Problem(id="z", prompt="?", answer="0.0")
+    traces = SyntheticPolicy(accuracy=0.0, seed=0).sample_full(
+        problem, n=30, temperature=0.0, max_tokens=8
+    )
+    assert sum(_OUTCOME.verify(problem, t).correct for t in traces) == 0

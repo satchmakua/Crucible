@@ -19,18 +19,25 @@ step-marker convention.
 from __future__ import annotations
 
 import random
+from functools import cache
 
 from crucible.domain.types import Compute, Problem, Step, Trace
 from crucible.segment import approx_tokens
+from crucible.verify.math_outcome import math_equal
 
 GOOD_MARKER = "[GOOD]"
 BAD_MARKER = "[BAD]"
 
 
+@cache
 def _distractor(gold: str | None) -> str:
+    """A wrong answer NOT math-equivalent to gold (so '0' can't collide with '0.0')."""
     if gold is None:
         return "0"
-    return "0" if gold.strip() != "0" else "1"
+    for candidate in ("0", "1", "2", "-1", "7"):
+        if not math_equal(candidate, gold):
+            return candidate
+    return "999999999"
 
 
 class StepwisePolicy:

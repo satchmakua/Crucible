@@ -38,3 +38,17 @@ def test_network_access_is_blocked() -> None:
     tests = ["socket.create_connection(('example.com', 80))"]
     result = run_in_sandbox(code, tests, timeout=10)
     assert not result.passed  # the preamble neuters socket before any connection
+
+
+def test_clean_exit_before_tests_is_not_a_pass() -> None:
+    # A candidate that exits 0 before the asserts run must NOT be scored as passing —
+    # the exit code alone can't be trusted (this was a real reward-hack hole).
+    code = "def add(a, b):\n    return a - b\nimport sys\nsys.exit(0)"
+    result = run_in_sandbox(code, ["assert add(2, 3) == 5"], timeout=10)
+    assert not result.passed
+
+
+def test_systemexit_in_main_block_is_not_a_pass() -> None:
+    code = "def add(a, b):\n    return a - b\nif __name__ == '__main__':\n    raise SystemExit(0)"
+    result = run_in_sandbox(code, ["assert add(2, 3) == 5"], timeout=10)
+    assert not result.passed

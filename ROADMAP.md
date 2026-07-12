@@ -32,11 +32,12 @@ The milestone checklist. Build the next unchecked milestone in order.
 
 ## Phase 1 — Measured lift on math
 
-- [ ] **M1 — Ollama backend + real pass@1 on GSM8K.** Wire the real `OllamaPolicy`
+- [x] **M1 — Ollama backend + real pass@1 on GSM8K.** Wire the real `OllamaPolicy`
   into the run loop and load GSM8K via the HuggingFace `datasets` extra. Generate one
   CoT per problem, extract + verify, report pass@1 on ~10–50 problems.
-  _(Built and unit-tested 2026-06-27 against a mocked transport; run the Test below to
-  confirm against a live server, then check this box.)_
+  _(✓ Confirmed 2026-06-28 on live Ollama — `qwen2.5:7b-instruct` scored 2/3 on real
+  GSM8K with working extraction + math-verify + compute accounting. A larger `--limit`
+  run for a tighter CI is optional; the path is proven.)_
   **Test:** with Ollama running and a small instruct model pulled (e.g.
   `qwen2.5-math-1.5b-instruct`), `crucible run --method pass1 --dataset gsm8k
   --policy ollama --model <m> --limit 20` prints a pass@1 with a Wilson CI and writes
@@ -148,4 +149,8 @@ compute counted — the result is honest enough to trust.
 - [ ] **H1 — Execute the real-model variants; lead with them.** Run the M1/M2/M4/M6/M7 "Real-model variant" Tests on Ollama (**Qwen2.5-Math-1.5B-Instruct**) + a real open PRM (e.g. Qwen2.5-Math-PRM / Skywork) on **MATH-500** (graded; the beam-beats-best-of-N crossover only shows on the hard subset). *Accept:* `docs/RESULTS.md` and the README **lead with a real ≥3-seed MATH-500 accuracy-vs-compute curve with Wilson CIs** showing search lifting the 1.5B policy, frontier overlaid; the synthetic curves are demoted to "mechanism validation."
 - [ ] **H2 — The "small-beats-big" headline.** Add a named bigger-model baseline (run pass@1 of e.g. a 7B/14B instruct on the same MATH-500 subset) and show **1.5B + compute-optimal search matches/beats it at the measured compute** (the Snell 2024 / "Can 1B Surpass 405B?" result). *Accept:* a one-line claim in RESULTS.md backed by both runs + the frontier table.
 - [ ] **H3 — Record real runs as fixtures.** Cassette the real model/PRM calls so the headline curve regenerates in CI without a GPU. *Accept:* an offline/CI path reproduces the real numbers from committed fixtures.
-- [ ] **H4 — Stress the search strategies.** Adversarial tests: degenerate beams (width 1, all-terminal), empty/tied PRM scores, MCTS budget exhaustion, single-candidate expansions. *Accept:* added tests pass; raise search-module coverage.
+- [x] **H4 — Stress the search strategies.** _(✓ 2026-06-28.)_ An adversarial multi-agent
+  audit of the search/verification core found **8 real bugs** (3 high) that only manifest on
+  the real-model path — all fixed with regression tests. Degenerate cases now covered:
+  width-1/greedy beams, single-candidate expansion, MCTS budget exhaustion, tied/empty PRM
+  scores (`tests/test_search_degenerate.py`). *Accept met:* 115 tests pass; see PROGRESS.

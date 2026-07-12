@@ -5,10 +5,12 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **M1–M7 built** — the roadmap is complete (M1 awaits a live-Ollama
-test; M2–M7 self-verified cold). The full search ladder + the compute-optimal report are
-in. Remaining work is *real-model runs*: confirm M1, then run the sweeps on
-Ollama + a real PRM to turn the synthetic curves into real ones.
+**Current phase:** **M1–M7 built; M1 confirmed on a real model; search core hardened (H4).**
+A live Ollama run (`qwen2.5:7b-instruct`, 3 GSM8K) scored 2/3 end-to-end (2026-06-28). An
+adversarial stress test then found + fixed 8 real bugs in the search/verification core (all
+real-model-only), **115 tests** green. What remains is the *heavier* real runs (the human's,
+GPU-gated): a real PRM and the full `lift-curve.yaml` sweep (ROADMAP H1–H3) to turn the
+synthetic curves into real ones.
 
 ## State of the tree
 
@@ -44,6 +46,41 @@ Ollama + a real PRM to turn the synthetic curves into real ones.
 | CLI (run/report/sweep/compare/version) | `cli.py` | ✅ (all real) |
 
 ---
+
+## H4 — Adversarial hardening of the search core · 2026-06-28 · self-verified cold
+
+An adversarial multi-agent stress test (9 skeptical finders over the search/verification
+core, each finding re-checked by a refute-it verifier) found **8 real bugs** — and, tellingly,
+**every one only manifests on the real-model path**, invisible to the synthetic suite (the
+mocks always emit `\boxed`, terminate at a fixed depth, never exit early, never use a
+zero-equivalent gold). One candidate ("carried-forward terminals re-scored") was correctly
+**refuted** by the adversarial pass. All 8 fixed with regression tests (95 → **115 tests**).
+
+**High severity (fixed):**
+- **beam dropped completed answers** (`beam.py`): final selection was pure PRM-argmax, so a
+  finished correct trace could lose to a higher-PRM *non-terminal* partial, and budget
+  exhaustion returned a partial whose "answer" was a stray mid-reasoning number. Now tracks
+  and returns the best *completed* trace.
+- **prose answers broke terminal detection** (`answer_extract.py`): the `_ANSWER_PHRASE`
+  regex required the literal text `boxe`, so "The answer is 42" never matched →
+  `has_explicit_answer` missed prose → beam/MCTS never terminated early on real models
+  (~15× compute inflation on the honesty axis). Fixed to require an `is/:/=` connector *or*
+  `\boxed` (so a bare "answer" mid-sentence still isn't terminal).
+- **sandbox clean-exit reward hack** (`code_sandbox.py`): a candidate exiting 0 before the
+  asserts (`sys.exit(0)`, a `__main__` block) was scored as passing without running any test.
+  Now requires an end-of-script sentinel *and* exit 0.
+
+**Medium/low (fixed):** MCTS eager `evaluate(node)` in a `max(default=…)` burned a counted
+PRM pass every expansion (now `if children else …`); sweeping a non-`_knob` compute field
+merged distinct curve points (cell key is now a full config signature minus seed);
+`wall_seconds` double-counted on Ollama runs (now set to true elapsed); the synthetic
+`_distractor` "0" collided with a zero-equivalent gold under the symbolic verifier (now
+picks a value the verifier doesn't equate).
+
+**Verified:** ruff + mypy clean (38 files); **115 tests pass**; the synthetic sweep still
+reads pass@1 11% → beam 100%, and MCTS is now slightly *more* efficient (the removed wasted
+eval: 55.6%/88.9% at 2k/4k tokens vs 50%/77.8%). This closes **ROADMAP H4**. (H1–H3 remain —
+they need the real GPU runs.)
 
 ## M7 — Compute-optimal & the results report · built 2026-06-28 · self-verified cold
 
@@ -263,7 +300,17 @@ accuracy-vs-compute curve — now exist, demonstrated end-to-end without a model
 - PRM-weighted selection (the third line) is M3; the majority-vs-oracle-vs-PRM
   comparison on the *same* samples will likely want a runner tweak then.
 
-## M1 — Ollama backend + real pass@1 on GSM8K · built 2026-06-27 · awaiting test
+## M1 — Ollama backend + real pass@1 on GSM8K · built 2026-06-27 · ✓ confirmed 2026-06-28
+
+**Live confirmation (2026-06-28):** `crucible run --method pass1 --dataset gsm8k --policy
+ollama --model qwen2.5:7b-instruct --limit 3` → **2/3** on real GSM8K (gsm8k-0 18=18,
+gsm8k-1 3=3, gsm8k-2 195000≠70000 — a genuine model miss). GSM8K downloaded via HF; the
+answer extraction, `math-verify` equivalence, honest token counts (847), and Wilson CI all
+worked on real output; no GPU TDR crash on the short run (~42 s/problem, incl. cold load).
+A fuller `--limit 20` run for a tighter CI is left to the human (longer GPU run vs the
+documented TDR risk). The `qwen2.5:7b-instruct` policy is a non-reasoning instruct model,
+so the external-search lift stays visible (the -math variant is a drop-in upgrade).
+
 
 The first real-model slice: the engine can now read GSM8K/MATH-500 from HuggingFace
 and run pass@1 through a live Ollama server — no change to the search core, just two new

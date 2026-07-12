@@ -52,8 +52,16 @@ def _knob(cfg: RunConfig) -> int:
     return cfg.n
 
 
-def _cell_key(cfg: RunConfig) -> tuple[str, str, int]:
-    return (cfg.method, cfg.selection, _knob(cfg))
+def _cell_key(cfg: RunConfig) -> str:
+    # Pool two runs into one cell only if they are the SAME experiment point except for
+    # the seed. Keying on just (method, selection, knob) would silently merge distinct
+    # operating points when a user sweeps a compute-affecting field that `_knob` doesn't
+    # surface (beam_expansions, max_steps, temperature, …) — mislabeling several curve
+    # points as one. A full-config signature (minus seed/output_dir) is the honest key.
+    signature = cfg.to_dict()
+    signature.pop("seed", None)
+    signature.pop("output_dir", None)
+    return json.dumps(signature, sort_keys=True, default=str)
 
 
 def aggregate_cell(summaries: list[RunSummary]) -> dict[str, Any]:
@@ -103,7 +111,7 @@ def run_sweep(config_path: str | Path) -> SweepResult:
     sweep_dir = Path(output_dir) / datetime.now().strftime("sweep-%Y-%m-%dT%H-%M-%S")
     sweep_dir.mkdir(parents=True, exist_ok=True)
 
-    groups: dict[tuple[str, str, int], list[RunSummary]] = {}
+    groups: dict[str, list[RunSummary]] = {}
     for i, cfg in enumerate(configs):
         for seed in seeds:
             scfg = replace(cfg, seed=seed)

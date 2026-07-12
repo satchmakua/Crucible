@@ -44,6 +44,12 @@ except Exception:
 """
 
 
+# Printed only if control reaches the very end of the script — i.e. every test ran
+# without raising. A clean `sys.exit(0)` / `raise SystemExit` in the candidate exits with
+# code 0 *before* this line, so we can't trust the exit code alone to mean "tests passed".
+_SENTINEL = "__CRUCIBLE_ALL_TESTS_PASSED_9f3c__"
+
+
 @dataclass(frozen=True)
 class SandboxResult:
     passed: bool
@@ -51,9 +57,16 @@ class SandboxResult:
 
 
 def run_in_sandbox(code: str, tests: list[str], *, timeout: float = 10.0) -> SandboxResult:
-    """Execute `code` + `tests` in an isolated subprocess; pass iff it exits cleanly."""
+    """Execute `code` + `tests` in an isolated subprocess; pass iff every test ran clean."""
     cpu = max(1, int(timeout) + 1)
-    script = _PREAMBLE.format(cpu=cpu) + "\n" + code + "\n\n" + "\n".join(tests) + "\n"
+    script = (
+        _PREAMBLE.format(cpu=cpu)
+        + "\n"
+        + code
+        + "\n\n"
+        + "\n".join(tests)
+        + f"\nprint({_SENTINEL!r})\n"
+    )
 
     env = {k: v for k, v in os.environ.items() if not k.lower().endswith("_proxy")}
 
@@ -75,8 +88,13 @@ def run_in_sandbox(code: str, tests: list[str], *, timeout: float = 10.0) -> San
         except subprocess.TimeoutExpired:
             return SandboxResult(passed=False, detail=f"timed out after {timeout:g}s")
 
-        if proc.returncode == 0:
+        # Pass requires BOTH a clean exit AND the end-of-script sentinel — so code that
+        # exits 0 before the tests finish (sys.exit, an early SystemExit, a __main__
+        # block) is a fail, not a false pass.
+        if proc.returncode == 0 and _SENTINEL in (proc.stdout or ""):
             return SandboxResult(passed=True, detail="all tests passed")
+        if proc.returncode == 0:
+            return SandboxResult(passed=False, detail="exited before all tests completed")
         lines = (proc.stderr or proc.stdout or "").strip().splitlines()
         detail = lines[-1].strip() if lines else f"exited with code {proc.returncode}"
         return SandboxResult(passed=False, detail=detail[:200])

@@ -24,3 +24,17 @@ def test_empty_compute_is_zero() -> None:
     c = Compute()
     assert c.total_tokens == 0
     assert (c + c).total_tokens == 0
+
+
+def test_wall_seconds_replaced_not_summed() -> None:
+    # The runner sets wall_seconds to the true outer elapsed rather than adding it to the
+    # per-trace generation time the strategy already summed (which double-counted real
+    # Ollama runs). Token/call counts are preserved.
+    from dataclasses import replace
+
+    trace_compute = Compute(policy_gen_tokens=50, policy_forward_calls=4, wall_seconds=100.0)
+    result = replace(trace_compute + Compute(verifier_forward_calls=1), wall_seconds=5.0)
+    assert result.wall_seconds == 5.0  # true elapsed, not 100 + 5
+    assert result.policy_gen_tokens == 50
+    assert result.policy_forward_calls == 4
+    assert result.verifier_forward_calls == 1
