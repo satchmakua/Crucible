@@ -37,7 +37,10 @@ dependencies = [
 # HuggingFace dataset loaders (GSM8K, MATH-500, HumanEval, MBPP) — M1+.
 datasets = ["datasets>=2.19,<4"]
 # Process-reward model scoring needs per-step logits → transformers/torch — M3+.
-prm = ["torch>=2.2", "transformers>=4.44", "accelerate>=0.30"]
+# transformers is pinned <5: the open PRMs' custom modeling code targets the 4.x cache API.
+# On Blackwell (RTX 50xx / sm_120) install torch from the CUDA 12.8 index first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+prm = ["torch>=2.2", "transformers>=4.44,<5", "accelerate>=0.30"]
 # High-throughput batched sampling + logprobs (WSL2/cloud GPU) — optional backend.
 vllm = ["vllm>=0.5"]
 # Dev tooling: the cheap guardrails the build loop runs every milestone.

@@ -70,61 +70,74 @@ class MockProcessVerifier:
 
 
 class PRMVerifier:
-    """A real open PRM via `transformers` (e.g. Qwen2.5-Math-PRM-7B).
+    """A real open PRM via `transformers` — the Skywork-o1-Open-PRM (Qwen2-reward) family.
 
-    Targets the Qwen-PRM scoring convention: steps are joined with a separator token and
-    the model emits a per-step "good" probability. The exact tensor wiring is
-    model-specific — **verify against the model card on the first real run**; the mock
-    PRM carries the unit-tested logic. Needs the `prm` extra (torch + transformers).
+    Convention (validated 2026-07-12 against Skywork-o1-Open-PRM-Qwen-2.5-1.5B on an
+    RTX 5070 Ti): the input is ``bos + problem + "\\n"`` followed by each reasoning step,
+    every step terminated by a newline whose token position is a *reward position*. The
+    model's per-token value head (``v_head``) gives a scalar; ``sigmoid`` maps it to a
+    "good so far" probability, read off at each step's newline → one reward per step.
+
+    Needs the `prm` extra (torch + transformers **<5** — the model's custom code targets
+    the 4.x cache API). Runs on the GPU; not exercised in CI (the mock PRM is).
     """
 
     name = "prm"
 
-    def __init__(
-        self,
-        model_id: str,
-        *,
-        device: str | None = None,
-        step_separator: str = "\n\n",
-    ) -> None:
+    def __init__(self, model_id: str, *, device: str | None = None) -> None:
         self.model_id = model_id
         self.device = device
-        self.step_separator = step_separator
         self._model: Any = None
         self._tokenizer: Any = None
+        self._head: Any = None
 
-    def _ensure_loaded(self) -> None:
+    def _ensure_loaded(self) -> None:  # pragma: no cover - needs a GPU + the prm extra
         if self._model is not None:
             return
         try:
-            import torch  # noqa: F401
+            import torch
             from transformers import AutoModel, AutoTokenizer
-        except ImportError as exc:  # pragma: no cover - only without the extra
+        except ImportError as exc:
             raise NotImplementedError(
                 'the PRM backend needs the `prm` extra: pip install -e ".[prm]"'
             ) from exc
+        self.device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
+        dtype = torch.bfloat16 if self.device.startswith("cuda") else torch.float32
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
-        self._model = AutoModel.from_pretrained(
-            self.model_id, trust_remote_code=True, torch_dtype="auto"
-        ).eval()
-        if self.device:
-            self._model = self._model.to(self.device)
+        model = AutoModel.from_pretrained(
+            self.model_id, trust_remote_code=True, torch_dtype=dtype
+        )
+        self._model = model.to(self.device).eval()
+        # The per-token value head: prefer the named `v_head`, else the lone Linear→1.
+        self._head = getattr(model, "v_head", None)
+        if self._head is None:
+            for module in model.modules():
+                if isinstance(module, torch.nn.Linear) and module.out_features == 1:
+                    self._head = module
+                    break
 
     def score_steps(self, problem: Problem, prefix: list[Step]) -> list[float]:  # pragma: no cover
         self._ensure_loaded()
         import torch
 
-        steps_text = [s.text for s in prefix] or [""]
-        prompt = f"{problem.prompt}\n\n" + self.step_separator.join(steps_text)
-        inputs = self._tokenizer(prompt, return_tensors="pt")
-        if self.device:
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        tok = self._tokenizer
+        ids: list[int] = list(tok.encode((tok.bos_token or "") + problem.prompt + "\n"))
+        flags: list[int] = [0] * len(ids)
+        newline = tok.encode("\n")[-1]
+        for step in prefix:
+            step_ids = tok.encode(step.text) + [newline]
+            ids.extend(step_ids)
+            flags.extend([0] * (len(step_ids) - 1) + [1])
+
+        reward_positions = [i for i, f in enumerate(flags) if f == 1]
+        if not reward_positions:
+            return [0.0]
+
+        inp = torch.tensor([ids], device=self.device)
         with torch.no_grad():
-            outputs = self._model(**inputs)
-        # Reduce the model's per-token reward signal to one score per step. Different
-        # PRMs expose this differently; mean-pool the last hidden/logit as a sane default.
-        logits = getattr(outputs, "logits", None)
-        if logits is None:
-            logits = outputs[0]
-        reward = torch.sigmoid(logits.float().mean()).item()
-        return [float(reward) for _ in steps_text]
+            out = self._model(
+                input_ids=inp, attention_mask=torch.ones_like(inp), output_hidden_states=True
+            )
+        per_token = torch.sigmoid(self._head(out.hidden_states[-1]).float().reshape(-1))
+        per_token = per_token.detach().cpu()
+        return [float(per_token[i]) for i in reward_positions]

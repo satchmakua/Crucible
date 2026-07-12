@@ -5,12 +5,12 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **M1–M7 built; M1 confirmed on a real model; search core hardened (H4).**
-A live Ollama run (`qwen2.5:7b-instruct`, 3 GSM8K) scored 2/3 end-to-end (2026-06-28). An
-adversarial stress test then found + fixed 8 real bugs in the search/verification core (all
-real-model-only), **115 tests** green. What remains is the *heavier* real runs (the human's,
-GPU-gated): a real PRM and the full `lift-curve.yaml` sweep (ROADMAP H1–H3) to turn the
-synthetic curves into real ones.
+**Current phase:** **M1–M7 built; the full real stack runs on the GPU.** M1 confirmed on
+live Ollama; search core hardened (H4, 8 bugs); real-run cassettes (H3 gen-side); and — as
+of 2026-07-12 — the **real learned PRM runs end-to-end** on the RTX 5070 Ti (Blackwell torch
++ Skywork 1.5B PRM), with a first honest real selection-gap measured on GSM8K. **117 tests**
+green. What remains is the *headline* real runs: the multi-seed **MATH-500** lift curve (H1)
+and the small-beats-big result (H2) — a stronger PRM / harder data, now unblocked.
 
 ## State of the tree
 
@@ -46,6 +46,33 @@ synthetic curves into real ones.
 | CLI (run/report/sweep/compare/version) | `cli.py` | ✅ (all real) |
 
 ---
+
+## Real PRM working on the GPU + first real selection-gap · 2026-07-12
+
+The "clearly human-owned" GPU/PRM blocker is **resolved** — the real learned verifier now
+runs end-to-end on the dev machine (RTX 5070 Ti Laptop, 12 GB).
+
+**Setup (the fiddly parts, now documented):**
+- **Blackwell (sm_120) torch:** `pip install torch --index-url .../cu128` → torch
+  2.11.0+cu128; `torch.cuda.get_device_capability() == (12, 0)`, GPU matmul confirmed. The
+  Blackwell-wheel risk was real but is solved by the cu128 index.
+- **transformers pinned `<5`:** the open PRMs' custom modeling code calls
+  `DynamicCache.from_legacy_cache`, removed in transformers 5.x → downgraded to 4.46.3
+  (capped in the `prm` extra).
+- **`PRMVerifier` rewired to the real convention.** My M3 generic implementation was wrong
+  (mean-pooled logits). The real Skywork-o1-Open-PRM (a `Qwen2ForRewardModel`) exposes a
+  per-token value head (`v_head`); the correct scoring is `bos + problem + "\n"`, each
+  step's trailing newline a reward position, `sigmoid(v_head(hidden))` read there. Probed
+  it directly: a correct trace scores [0.92, 0.86, 0.68], a wrong one [0.27, 0.16, 0.02] —
+  it flags the bad first step. 3.16 GB VRAM.
+
+**First real result** — `crucible compare` on real GSM8K, `qwen2.5:1.5b-instruct` (Ollama,
+100% GPU) + the real 1.5B Skywork PRM, 8 problems × N=8: **majority 62.5%, PRM 62.5%,
+oracle 87.5%** (PRM tokens counted: 4,075 vs 2,591). Honest read: the stack works and the
+selection gap is real (oracle − prm = 25%), but the **small PRM doesn't beat majority on
+easy GSM8K** — the lift needs a stronger PRM / harder data (MATH-500), per DESIGN. Recorded
+in `docs/RESULTS.md §0`. This executes the *mechanism* of ROADMAP H1's real-model variant;
+the full multi-seed MATH-500 curve (H1) + the small-beats-big headline (H2) remain.
 
 ## H3 (partial) — Real-run cassettes: a live run replays offline · 2026-06-28
 

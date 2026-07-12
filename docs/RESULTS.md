@@ -10,9 +10,37 @@
 not on a real LLM. That is deliberate: it lets the *mechanism* and the *measurement* be
 verified end-to-end with no GPU or network, on every commit. The real artifact is the
 identical analysis pointed at a frozen open model (Qwen2.5-Math-Instruct via Ollama) and
-a real open PRM — that run remains to be done (the machinery is ready; see
-[Reproducing](#reproducing)). Read these as "the harness measures the right things
+a real open PRM — a **first real pass is now done** (§0 below); the full multi-seed
+MATH-500 curve is still pending. Read §1–§5 as "the harness measures the right things
 correctly," not "model X scores Y."
+
+## 0. Real-model results (first pass, 2026-07-12)
+
+The stack is no longer hypothetical. On the dev machine (RTX 5070 Ti Laptop, 12 GB, `torch
+2.11+cu128` / sm_120), a live run of the *same* `crucible compare` on **real GSM8K** —
+policy `qwen2.5:1.5b-instruct` via Ollama, verifier the real **Skywork-o1-Open-PRM-Qwen-
+2.5-1.5B** scored on the GPU — gives (8 problems, N=8):
+
+| selector | accuracy (95% CI) | gap to oracle | tokens / problem |
+|---|---|---|---|
+| majority | 62.5% [31%, 86%] | +25.0% | 2,591 |
+| PRM | 62.5% [31%, 86%] | +25.0% | 4,075 |
+| oracle | 87.5% [53%, 98%] | +0.0% | 2,591 |
+
+What this shows — and, honestly, what it doesn't:
+- **The whole real stack works end-to-end** — real generation, a real *learned per-step*
+  PRM (scored on the GPU, its forward-pass tokens counted: 4,075 vs 2,591 — the honesty
+  axis holds on real models), real outcome verification.
+- **The selection gap is real and large.** Oracle reaches 87.5% (for 7/8 problems a passing
+  trace exists among the 8 samples), but the 1.5B PRM selects **no better than verifier-free
+  majority** (both 62.5%) — it leaves ~25% on the table. That is exactly the reality this
+  project exists to surface: **a small open PRM is an imperfect selector** (ProcessBench F1
+  ≈ 56 even for the best 7B PRMs; a 1.5B is weaker), and GSM8K's grade-school math is easy
+  enough that majority voting is already a strong baseline.
+- **Where the PRM lift should appear:** harder, graded problems (MATH-500) with a stronger
+  PRM (7B) — the H1/H2 runs. The machinery is validated and ready; this pass proves the
+  *measurement*, not a triumphant lift. (A 3-problem pilot happened to show PRM 100% vs
+  majority 67% — small-sample luck; the 8-problem number above is the honest one.)
 
 ## 1. The headline: accuracy vs test-time compute
 
