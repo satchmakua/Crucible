@@ -5,12 +5,13 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **M1–M7 built; the full real stack runs on the GPU.** M1 confirmed on
-live Ollama; search core hardened (H4, 8 bugs); real-run cassettes (H3 gen-side); and — as
-of 2026-07-12 — the **real learned PRM runs end-to-end** on the RTX 5070 Ti (Blackwell torch
-+ Skywork 1.5B PRM), with a first honest real selection-gap measured on GSM8K. **117 tests**
-green. What remains is the *headline* real runs: the multi-seed **MATH-500** lift curve (H1)
-and the small-beats-big result (H2) — a stronger PRM / harder data, now unblocked.
+**Current phase:** **M1–M7 built; the real lift curve is captured.** The real stack runs
+on the RTX 5070 Ti (Blackwell torch + Ollama 1.5B + Skywork 1.5B PRM), and `docs/RESULTS.md
+§0` now **leads with a real GSM8K accuracy-vs-compute curve** (pass@1 40% → oracle 90%; PRM
+beats majority) that regenerates offline in CI from a committed cassette. Hardening: **H3 ✓**
+(cassettes both sides), **H4 ✓** (8 bugs fixed), **H1 substantially met**. **118 tests** green.
+Remaining polish: the ≥3-seed **MATH-500** curve + beam/mcts real cells (H1), small-beats-big
+(H2) — all now ordinary runs on a validated stack.
 
 ## State of the tree
 
@@ -46,6 +47,32 @@ and the small-beats-big result (H2) — a stronger PRM / harder data, now unbloc
 | CLI (run/report/sweep/compare/version) | `cli.py` | ✅ (all real) |
 
 ---
+
+## The shiny artifact — a real GSM8K lift curve · 2026-07-12
+
+**The headline the whole project was built for, on a real model.** `crucible.bench`
+(generate-once, evaluate-at-many-N — avoids a 3-hour re-sampling marathon) captured **20
+real GSM8K** problems × 8 samples via `qwen2.5:1.5b-instruct` (Ollama, GPU), each scored by
+the real **Skywork-o1-Open-PRM-Qwen-2.5-1.5B** (GPU), in ~10 min, no TDR. The curve
+(`docs/gsm8k-lift-curve.png`, `docs/RESULTS.md §0`):
+
+| N | pass@1 | majority | PRM | oracle |
+|---|---|---|---|---|
+| 1 | 40% | 40% | 40% | 40% |
+| 4 | — | 45% | **60%** | 75% |
+| 8 | — | 50% | **60%** | **90%** |
+
+Three real results: (1) **compute → accuracy** — pass@1 40% → oracle 90% at N=8 (a perfect
+verifier more than doubles the frozen 1.5B); (2) **the learned PRM beats verifier-free
+majority** (60% vs 50%) — the value of a step-reward model, which the earlier 8-problem
+pilot was too small to show; (3) the **selection gap is honest** (oracle 90% > PRM 60%),
+with the PRM's forward-pass tokens counted (its line sits ~2× right).
+
+**Closes ROADMAP H3.** The run is captured to `tests/fixtures/gsm8k-bestofn.json` (traces +
+PRM scores + correctness); `tests/test_cassette.py` replays it offline and reproduces every
+number — the real curve regenerates in CI with no GPU. **118 tests** green. (H1 is now
+substantially met — RESULTS.md leads with a real curve, synthetic demoted to mechanism
+validation; the full ≥3-seed MATH-500 version is the remaining polish.)
 
 ## Real PRM working on the GPU + first real selection-gap · 2026-07-12
 

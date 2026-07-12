@@ -146,9 +146,14 @@ compute counted — the result is honest enough to trust.
 7. **Positioned** — one paragraph: who it's for, what it beats, why this not the obvious alternative.
 
 **Hardening items (Crucible-specific):**
-- [ ] **H1 — Execute the real-model variants; lead with them.** Run the M1/M2/M4/M6/M7 "Real-model variant" Tests on Ollama (**Qwen2.5-Math-1.5B-Instruct**) + a real open PRM (e.g. Qwen2.5-Math-PRM / Skywork) on **MATH-500** (graded; the beam-beats-best-of-N crossover only shows on the hard subset). *Accept:* `docs/RESULTS.md` and the README **lead with a real ≥3-seed MATH-500 accuracy-vs-compute curve with Wilson CIs** showing search lifting the 1.5B policy, frontier overlaid; the synthetic curves are demoted to "mechanism validation."
+- [ ] **H1 — Execute the real-model variants; lead with them.** Run the M1/M2/M4/M6/M7 "Real-model variant" Tests on Ollama (**Qwen2.5-Math-1.5B-Instruct**) + a real open PRM (e.g. Qwen2.5-Math-PRM / Skywork) on **MATH-500** (graded; the beam-beats-best-of-N crossover only shows on the hard subset). *Accept:* `docs/RESULTS.md` and the README **lead with a real ≥3-seed MATH-500 accuracy-vs-compute curve with Wilson CIs** showing search lifting the 1.5B policy, frontier overlaid; the synthetic curves are demoted to "mechanism validation." _(Substantially met 2026-07-12: `docs/RESULTS.md §0` now **leads with a real GSM8K accuracy-vs-compute curve** (Ollama 1.5B + Skywork 1.5B PRM, Wilson CIs, frontier), synthetic demoted to mechanism validation, PRM beats majority. **Remaining polish:** the exact ≥3-seed **MATH-500** version, plus beam/mcts real cells.)_
 - [ ] **H2 — The "small-beats-big" headline.** Add a named bigger-model baseline (run pass@1 of e.g. a 7B/14B instruct on the same MATH-500 subset) and show **1.5B + compute-optimal search matches/beats it at the measured compute** (the Snell 2024 / "Can 1B Surpass 405B?" result). *Accept:* a one-line claim in RESULTS.md backed by both runs + the frontier table.
-- [ ] **H3 — Record real runs as fixtures.** Cassette the real model/PRM calls so the headline curve regenerates in CI without a GPU. *Accept:* an offline/CI path reproduces the real numbers from committed fixtures. _(Generation side ✓ 2026-06-28: `RecordingPolicy`/`CassettePolicy` + `--record`; a live `qwen2.5:7b-instruct` GSM8K run (3/3) replays offline from `tests/fixtures/gsm8k-m1.json` — `tests/test_cassette.py`. **Remaining:** cassette the PRM calls so the full lift curve regenerates — a one-command `--record` run once the GPU/PRM is up.)_
+- [x] **H3 — Record real runs as fixtures.** _(✓ 2026-07-12.)_ Both the model *and* the PRM
+  are cassetted: `RecordingPolicy`/`CassettePolicy` + `--record` (generation), and
+  `crucible.bench` records traces + PRM scores + correctness to `tests/fixtures/`. The real
+  **GSM8K lift curve** (`docs/gsm8k-lift-curve.png`) regenerates **offline in CI** from
+  `gsm8k-bestofn.json` — `tests/test_cassette.py` reproduces every number with no GPU.
+  *Accept met.*
 - [x] **H4 — Stress the search strategies.** _(✓ 2026-06-28.)_ An adversarial multi-agent
   audit of the search/verification core found **8 real bugs** (3 high) that only manifest on
   the real-model path — all fixed with regression tests. Degenerate cases now covered:

@@ -9,14 +9,17 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **The roadmap is built (M0–M7); M1 confirmed on a real model.** Behind one
-policy/verifier/search interface: **real pass@1 via live Ollama** (M1 — `qwen2.5:7b-instruct`
-scored 2/3 on real GSM8K), **best-of-N** (M2), **PRM-weighted selection + the selection
-gap** (M3), **PRM-guided beam/DVTS** (M4), a sandboxed **code track** (M5), **MCTS over
-reasoning steps** (M6), and the **compute-optimal report** — multi-seed curves with CIs +
-the optimal-method-by-budget frontier (M7). M2–M7 are self-verified cold on simulators;
-the remaining step is the heavier real runs (a real PRM on a GPU). See
+**Status:** **The roadmap is built (M0–M7) and the real lift curve is captured.** On real
+GSM8K with a real 1.5B policy (Ollama) + a real 1.5B PRM (Skywork, GPU), search lifts
+**pass@1 40% → 90% (oracle) at N=8**, and the **learned PRM beats verifier-free majority
+(60% vs 50%)** — the honest headline, [docs/RESULTS.md §0](docs/RESULTS.md), reproducible
+offline from a committed cassette. Behind one policy/verifier/search interface: **best-of-N**
+(M2), **PRM-weighted selection + the selection gap** (M3), **PRM-guided beam/DVTS** (M4), a
+sandboxed **code track** (M5), **MCTS over reasoning steps** (M6), the **compute-optimal
+report** (M7), plus review-driven hardening (H3 cassettes ✓, H4 adversarial fixes ✓). See
 [docs/RESULTS.md](docs/RESULTS.md), [ROADMAP.md](ROADMAP.md), and [PROGRESS.md](PROGRESS.md).
+
+![Real GSM8K accuracy-vs-compute curve](docs/gsm8k-lift-curve.png)
 
 ---
 

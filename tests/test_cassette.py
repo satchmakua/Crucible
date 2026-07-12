@@ -53,3 +53,34 @@ def test_real_gsm8k_fixture_reproduces_pass_at_1() -> None:
     # Reproduces the real Ollama run's numbers offline, no GPU/network (see PROGRESS):
     # qwen2.5:7b-instruct, greedy, 3/3 on the first 3 GSM8K test problems.
     assert _replay_pass_at_1(problems, records) == 3
+
+
+# --- The real GSM8K lift curve (§0 of RESULTS.md), reproduced offline from its cassette.
+_CURVE_FIXTURE = Path(__file__).parent / "fixtures" / "gsm8k-bestofn.json"
+
+
+def test_real_gsm8k_lift_curve_reproduces_offline() -> None:
+    if not _CURVE_FIXTURE.exists():  # pragma: no cover
+        import pytest
+
+        pytest.skip("no best-of-N cassette recorded yet")
+    from crucible.bench import curve_cells, load_samples
+
+    records = load_samples(_CURVE_FIXTURE)
+    assert len(records) == 20
+    cells = curve_cells(records, [1, 2, 4, 8], has_prm=True)
+
+    def hits(method: str, selection: str, n: int) -> int:
+        cell = next(
+            c for c in cells if c["method"] == method and c["selection"] == selection and c["n"] == n
+        )
+        assert cell["total"] == 20
+        return int(cell["correct"])
+
+    # The real numbers behind docs/gsm8k-lift-curve.png (Ollama 1.5B + Skywork 1.5B PRM):
+    assert hits("pass1", "none", 1) == 8  # pass@1 = 40%
+    assert hits("best_of_n", "oracle", 8) == 18  # oracle@8 = 90% — search doubles accuracy
+    assert hits("best_of_n", "prm", 8) == 12  # PRM@8 = 60%
+    assert hits("best_of_n", "majority", 8) == 10  # majority@8 = 50%
+    # The headline: the learned PRM beats verifier-free majority.
+    assert hits("best_of_n", "prm", 8) > hits("best_of_n", "majority", 8)

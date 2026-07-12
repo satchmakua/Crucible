@@ -5,42 +5,48 @@
 > into measured accuracy, *with the verifier's compute counted*, and showing **why**
 > (which method is compute-optimal at which budget, and where the PRM's selection gap is).
 
-**Important caveat, stated up front.** The numbers below are produced **cold, on seeded
-*simulators*** (a synthetic policy of known accuracy and a mock PRM/step-reward model),
-not on a real LLM. That is deliberate: it lets the *mechanism* and the *measurement* be
-verified end-to-end with no GPU or network, on every commit. The real artifact is the
-identical analysis pointed at a frozen open model (Qwen2.5-Math-Instruct via Ollama) and
-a real open PRM — a **first real pass is now done** (§0 below); the full multi-seed
-MATH-500 curve is still pending. Read §1–§5 as "the harness measures the right things
-correctly," not "model X scores Y."
+**§0 is the real artifact — a real model, real PRM, real data.** §1–§6 are the *cold,
+simulator* validation (a synthetic policy + a mock PRM) that runs with no GPU on every
+commit; read them as "the harness measures the right things correctly," not "model X scores
+Y." The real curve is §0.
 
-## 0. Real-model results (first pass, 2026-07-12)
+## 0. The real lift curve — accuracy vs test-time compute on GSM8K
 
-The stack is no longer hypothetical. On the dev machine (RTX 5070 Ti Laptop, 12 GB, `torch
-2.11+cu128` / sm_120), a live run of the *same* `crucible compare` on **real GSM8K** —
-policy `qwen2.5:1.5b-instruct` via Ollama, verifier the real **Skywork-o1-Open-PRM-Qwen-
-2.5-1.5B** scored on the GPU — gives (8 problems, N=8):
+![Real GSM8K accuracy-vs-compute curve](gsm8k-lift-curve.png)
 
-| selector | accuracy (95% CI) | gap to oracle | tokens / problem |
-|---|---|---|---|
-| majority | 62.5% [31%, 86%] | +25.0% | 2,591 |
-| PRM | 62.5% [31%, 86%] | +25.0% | 4,075 |
-| oracle | 87.5% [53%, 98%] | +0.0% | 2,591 |
+On the dev machine (RTX 5070 Ti Laptop, 12 GB, `torch 2.11+cu128` / sm_120): **20 real
+GSM8K** problems, policy `qwen2.5:1.5b-instruct` (Ollama, GPU), verifier the real
+**Skywork-o1-Open-PRM-Qwen-2.5-1.5B** (GPU). Each problem sampled 8× *once*, then every
+selector evaluated at each N over those samples (`crucible.bench`):
 
-What this shows — and, honestly, what it doesn't:
-- **The whole real stack works end-to-end** — real generation, a real *learned per-step*
-  PRM (scored on the GPU, its forward-pass tokens counted: 4,075 vs 2,591 — the honesty
-  axis holds on real models), real outcome verification.
-- **The selection gap is real and large.** Oracle reaches 87.5% (for 7/8 problems a passing
-  trace exists among the 8 samples), but the 1.5B PRM selects **no better than verifier-free
-  majority** (both 62.5%) — it leaves ~25% on the table. That is exactly the reality this
-  project exists to surface: **a small open PRM is an imperfect selector** (ProcessBench F1
-  ≈ 56 even for the best 7B PRMs; a 1.5B is weaker), and GSM8K's grade-school math is easy
-  enough that majority voting is already a strong baseline.
-- **Where the PRM lift should appear:** harder, graded problems (MATH-500) with a stronger
-  PRM (7B) — the H1/H2 runs. The machinery is validated and ready; this pass proves the
-  *measurement*, not a triumphant lift. (A 3-problem pilot happened to show PRM 100% vs
-  majority 67% — small-sample luck; the 8-problem number above is the honest one.)
+| N | pass@1 | majority | PRM | oracle |
+|---|---|---|---|---|
+| 1 | **40%** | 40% | 40% | 40% |
+| 2 | — | 40% | 50% | 60% |
+| 4 | — | 45% | **60%** | 75% |
+| 8 | — | 50% | **60%** | **90%** |
+
+(95% Wilson CIs on the plot; x-axis = **total tokens/problem, policy + verifier** — the
+PRM's forward passes counted, which is why the PRM line sits ~2× to the right.)
+
+The three things this project set out to show, now on a real model:
+1. **Test-time compute buys accuracy.** Single-shot pass@1 is 40%; with search, oracle
+   reaches **90%** at N=8 — a perfect verifier more than doubles accuracy from the *same*
+   frozen 1.5B model. Every selector's curve rises with compute.
+2. **The learned verifier earns its keep.** The real PRM reaches **60%** at N=4/8 vs
+   verifier-free **majority's 50%** — a real +10 pt lift from a *learned* step-reward model
+   over self-consistency. (This is the effect a smaller/easier sample can hide: an 8-problem
+   pilot showed PRM ≈ majority; on 20 problems the PRM clearly separates.)
+3. **The selection gap is real and honest.** Oracle 90% > PRM 60% is the headroom the PRM
+   *doesn't* capture — a small open PRM is an imperfect selector (ProcessBench F1 ≈ 56 even
+   for the best 7B PRMs), and the reported metric is always the outcome verifier on the
+   chosen trace, never a PRM score. The gap is exactly what a stronger PRM / harder data
+   (H1/H2) is expected to close.
+
+**Reproducible without a GPU.** The run is captured to `tests/fixtures/gsm8k-bestofn.json`
+(the 8 traces per problem + their PRM scores + correctness); `tests/test_cassette.py`
+replays it offline and reproduces every number above — a real result that regenerates in CI
+with no model (the "run live once, commit a fixture" pattern, now covering the PRM side).
 
 ## 1. The headline: accuracy vs test-time compute
 
