@@ -1,0 +1,536 @@
+{
+  "backend": "ollama",
+  "records": [],
+  "problems": [
+    {
+      "id": "math500-1",
+      "prompt": "Define\n\\[p = \\sum_{k = 1}^\\infty \\frac{1}{k^2} \\quad \\text{and} \\quad q = \\sum_{k = 1}^\\infty \\frac{1}{k^3}.\\]Find a way to write\n\\[\\sum_{j = 1}^\\infty \\sum_{k = 1}^\\infty \\frac{1}{(j + k)^3}\\]in terms of $p$ and $q.$",
+      "answer": "p - q",
+      "difficulty": "level-5"
+    },
+    {
+      "id": "math500-7",
+      "prompt": "The set of points $(x,y,z)$ that satisfy\n\\[2x = 3y = -z\\]is a line.\n\nThe set of points $(x,y,z)$ that satisfy\n\\[6x = -y = -4z\\]is another line.\n\nFind the angle between these lines, in degrees.",
+      "answer": "90^\\circ",
+      "difficulty": "level-4"
+    },
+    {
+      "id": "math500-9",
+      "prompt": "The expression $2\\cdot 3 \\cdot 4\\cdot 5+1$ is equal to 121, since multiplication is carried out before addition. However, we can obtain values other than 121 for this expression if we are allowed to change it by inserting parentheses. For example, we can obtain 144 by writing \\[\n(2\\cdot (3\\cdot 4)) \\cdot (5+1) = 144.\n\\]In total, how many values can be obtained from the expression $2\\cdot 3\\cdot 4 \\cdot 5 + 1$ by inserting parentheses? (Note that rearranging terms is not allowed, only inserting parentheses).",
+      "answer": "4",
+      "difficulty": "level-5"
+    },
+    {
+      "id": "math500-11",
+      "prompt": "Let $p(x)$ be a polynomial of degree 5 such that\n\\[p(n) = \\frac{n}{n^2 - 1}\\]for $n = 2,$ 3, 4, $\\dots,$ 7.  Find $p(8).$",
+      "answer": "\\frac{3}{56}",
+      "difficulty": "level-5"
+    },
+    {
+      "id": "math500-12",
+      "prompt": "The proper divisors of 12 are 1, 2, 3, 4 and 6. A proper divisor of an integer $N$ is a positive divisor of $N$ that is less than $N$. What is the sum of the proper divisors of the sum of the proper divisors of 284?",
+      "answer": "284",
+      "difficulty": "level-5"
+    },
+    {
+      "id": "math500-15",
+      "prompt": "Let $z = 2 + \\sqrt{2} - (3 + 3 \\sqrt{2})i$, and let $c = 2 - 3i$.  Let $w$ be the result when $z$ is rotated around $c$ by $\\frac{\\pi}{4}$ counter-clockwise.\n\n[asy]\nunitsize(0.6 cm);\n\npair C, W, Z;\n\nZ = (2 + sqrt(2), -3 - 3*sqrt(2));\nC = (2,-3);\nW = rotate(45,C)*(Z);\n\ndraw(Z--C--W);\n\ndot(\"$c$\", C, N);\ndot(\"$w$\", W, SE);\ndot(\"$z$\", Z, S);\nlabel(\"$\\frac{\\pi}{4}$\", C + (0.6,-1));\n[/asy]\n\nFind $w.$",
+      "answer": "6 - 5i",
+      "difficulty": "level-5"
+    },
+    {
+      "id": "math500-17",
+      "prompt": "Below is the graph of $y = a \\sin (bx + c) + d$ for some positive constants $a,$ $b,$ $c,$ and $d.$  Find the smallest possible value of $c.$\n\n[asy]import TrigMacros;\n\nsize(400);\n\nreal f(real x)\n{\n\treturn 2*sin(3*x + pi) + 1;\n}\n\ndraw(graph(f,-3*pi,3*pi,n=700,join=operator ..),red);\ntrig_axes(-3*pi,3*pi,-4,4,pi/2,1);\nlayer();\nrm_trig_labels(-5,5, 2);\n\nlabel(\"$1$\", (0,1), E);\nlabel(\"$2$\", (0,2), E);\nlabel(\"$3$\", (0,3), E);\nlabel(\"$-1$\", (0,-1), E);\nlabel(\"$-2$\", (0,-2), E);\nlabel(\"$-3$\", (0,-3), E);\n[/asy]",
+      "answer": "\\pi",
+      "difficulty": "level-4"
+    },
+    {
+      "id": "math500-22",
+      "prompt": "Denali and Nate work for a dog walking business and are paid for each dog they walk. Denali is responsible for $16$ dogs and Nate is responsible for $12$ dogs. Under the company's new policy, they will be assigned or unassigned new dogs in groups of $x$ dogs. The ratio of Denali's pay to Nate's pay would be the same if Denali started walking $4x$ more dogs and Nate stayed at $12$ dogs or if $x$ of Nate's dogs were reassigned to Denali. Find $x$ if $x\\neq0$.",
+      "answer": "5",
+      "difficulty": "level-5"
+    }
+  ],
+  "step_records": [
+    {
+      "key": "math500-1:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To solve the given problem, we need to express \\(\\sum_{j=1}^\\infty \\sum_{k=1}^\\infty \\frac{1}{(j+k)^3}\\) in terms of \\(p\\) and \\(q\\). Let's break it down step by step.",
+            "token_count": 512
+          },
+          {
+            "text": "To find a way to express the sum \n\\[ \\sum_{j=1}^\\infty \\sum_{k=1}^\\infty \\frac{1}{(j+k)^3}, \\]\nwe start by recognizing that the inner sum \\( \\sum_{k=1}^\\infty \\frac{1}{(j+k)^3} \\) can be written in terms of a known series. The outer sum then involves this series summed over all integers from 1 to infinity.",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-1:326d49486d0c8095",
+      "batches": [
+        [
+          {
+            "text": "To find a way to write \\(\\sum_{j = 1}^\\infty \\sum_{k = 1}^\\infty \\frac{1}{(j + k)^3}\\) in terms of \\(p\\) and \\(q\\), we start by considering the given sums:",
+            "token_count": 453
+          },
+          {
+            "text": "To solve this problem, we start by expressing the sum in a more convenient form that can be related to \\(p\\) and \\(q\\).",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-1:7cf207cae2df0cdc",
+      "batches": [
+        [
+          {
+            "text": "To solve for the given double sum, we start by considering each inner sum separately and then combine them appropriately.",
+            "token_count": 512
+          },
+          {
+            "text": "To express the sum \n\\[ \\sum_{j=1}^\\infty \\sum_{k=1}^\\infty \\frac{1}{(j+k)^3}, \\]\nwe start by recognizing that each inner sum can be written as:\n\\[ \\sum_{k=1}^\\infty \\frac{1}{(j+k)^3}. \\]",
+            "token_count": 443
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-1:10f82e6f1ea56721",
+      "batches": [
+        [
+          {
+            "text": "Given:\n\\[ p = \\sum_{k=1}^\\infty \\frac{1}{k^2} \\]\n\\[ q = \\sum_{k=1}^\\infty \\frac{1}{k^3} \\]",
+            "token_count": 512
+          },
+          {
+            "text": "\\[ p = \\sum_{k=1}^\\infty \\frac{1}{k^2}, \\quad q = \\sum_{k=1}^\\infty \\frac{1}{k^3}. \\]",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-7:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To find the angle between two lines, we can use the formula:\n\\[ \\cos(\\theta) = \\frac{m_1^2 + n_1^2 - m_2^2 - n_2^2}{\\sqrt{(m_1^2 + n_1^2)(m_2^2 + n_2^2)}} \\]\nwhere $m_1$ and $n_1$ are the direction cosines of one line, and $m_2$ and $n_2$ are the direction cosines of the other line.",
+            "token_count": 512
+          },
+          {
+            "text": "Let's solve this step by step:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-7:a8488aca8e61c34e",
+      "batches": [
+        [
+          {
+            "text": "To find the angle between two lines given their direction vectors, we can use the dot product formula. The angle \u03b8 between two vectors \\(\\vec{a}\\) and \\(\\vec{b}\\) is given by:\n\\[ \\cos(\u03b8) = \\frac{\\vec{a} \\cdot \\vec{b}}{||\\vec{a}|| ||\\vec{b}||} \\]",
+            "token_count": 512
+          },
+          {
+            "text": "To find the angle between two planes (which represent lines in 3D space), we can use the dot product of their normal vectors. The formula for the cosine of the angle $\\theta$ between two vectors $\\vec{a}$ and $\\vec{b}$ is given by:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-7:ff04d52ce2e652d9",
+      "batches": [
+        [
+          {
+            "text": "To find the angle between two lines, we need to determine their direction vectors first. Let's start with the given conditions:",
+            "token_count": 512
+          },
+          {
+            "text": "To find the angle between two lines, we first need to determine their direction vectors. The given conditions provide us with these directions:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-7:fa017024040cd0b0",
+      "batches": [
+        [
+          {
+            "text": "\\[\n\\cos \\theta = \\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{a}| |\\vec{b}|}\n\\]",
+            "token_count": 512
+          },
+          {
+            "text": "\\[\n\\cos \\theta = \\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{a}| |\\vec{b}|}\n\\]",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-9:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To determine how many different values we can obtain from the expression \\(2 \\cdot 3 \\cdot 4 \\cdot 5 + 1\\) by inserting parentheses, we need to consider all possible ways of grouping the multiplication and addition. The original expression is simply a single term:",
+            "token_count": 397
+          },
+          {
+            "text": "To determine how many unique values we can obtain from the expression \\(2 \\cdot 3 \\cdot 4 \\cdot 5 + 1\\) by inserting parentheses, we need to carefully analyze each possible placement of parentheses.",
+            "token_count": 445
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-9:50f4fd5c71524e0e",
+      "batches": [
+        [
+          {
+            "text": "To solve this problem, let's first express the given expression with explicit multiplication and addition:",
+            "token_count": 512
+          },
+          {
+            "text": "To solve this problem, let's first simplify the given expression:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-9:df48868937984e30",
+      "batches": [
+        [
+          {
+            "text": "The problem requires us to evaluate the expression \\(2 \\cdot 3 \\cdot 4 \\cdot 5 + 1\\) and understand how different groupings can yield distinct results.",
+            "token_count": 464
+          },
+          {
+            "text": "Starting with the given expression:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-9:281c23b067007366",
+      "batches": [
+        [
+          {
+            "text": "\\[2 \\cdot 3 \\cdot 4 \\cdot 5 + 1\\]",
+            "token_count": 473
+          },
+          {
+            "text": "\\[ 2 \\cdot 3 \\cdot 4 \\cdot 5 + 1 \\]",
+            "token_count": 398
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-11:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To find the value of \\( p(8) \\), we start by considering the polynomial \\( p(x) \\) and its given values at specific points. The problem states that for \\( n = 2, 3, 4, 5, 6, 7 \\), the polynomial satisfies:\n\\[\np(n) = \\frac{n}{n^2 - 1}\n\\]",
+            "token_count": 512
+          },
+          {
+            "text": "Given the polynomial \\( p(x) \\) of degree 5 such that \\( p(n) = \\frac{n}{n^2 - 1} \\) for \\( n = 2, 3, 4, 5, 6, 7 \\), we need to find \\( p(8) \\).",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-11:6951b64937cda540",
+      "batches": [
+        [
+          {
+            "text": "Given the polynomial \\( p(x) \\) of degree 5 and the values it takes at specific points:",
+            "token_count": 414
+          },
+          {
+            "text": "Given:\n\\[ p(n) = \\frac{n}{n^2 - 1} \\text{ for } n = 2, 3, 4, 5, 6, 7. \\]",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-11:fb645559fdcb3d5f",
+      "batches": [
+        [
+          {
+            "text": "To solve this problem, we will use the concept of polynomial interpolation. We have five points and a polynomial of degree at most four that passes through these points, so by Lagrange's interpolation formula, there exists a unique polynomial of degree 5 passing through those five points.",
+            "token_count": 512
+          },
+          {
+            "text": "To solve this problem, let's first observe the given function and the pattern it follows. The function is defined as:",
+            "token_count": 373
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-11:b5208505173a6ab5",
+      "batches": [
+        [
+          {
+            "text": "To find \\( p(8) \\), we first need to understand the structure of the polynomial and its given values. We start by examining the expression:\n\\[\np(n) = \\frac{n}{n^2 - 1}\n\\]\nThis can be rewritten using partial fractions as follows:\n\\[\np(n) = \\frac{n}{(n-1)(n+1)}\n\\]",
+            "token_count": 512
+          },
+          {
+            "text": "To find \\( p(8) \\), we recognize that the given conditions suggest a relationship between \\( p(n) \\) and the function \\( f(x) = \\frac{x}{x^2 - 1} \\). This suggests using the properties of polynomial interpolation, specifically Lagrange's interpolation formula.",
+            "token_count": 494
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-12:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To solve the problem, we need to follow these steps:",
+            "token_count": 502
+          },
+          {
+            "text": "To solve this problem, we need to follow these steps:",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-12:a1c63233784ec596",
+      "batches": [
+        [
+          {
+            "text": "### Step 1: Find the Proper Divisors of 284",
+            "token_count": 512
+          },
+          {
+            "text": "### Step-by-Step Solution",
+            "token_count": 444
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-12:3945e4200ae32e84",
+      "batches": [
+        [
+          {
+            "text": "1. **Find the sum of the proper divisors of 284**:\n   - Proper divisor of a number \\( N \\) is a positive divisor of \\( N \\) that is less than \\( N \\).\n   - First, find all divisors of 284.\n     - List of divisors: 1, 2, 4, 71, 142\n   - Proper divisors are those less than 284.\n     - Proper divisors of 284: 1, 2, 4, 71, 142",
+            "token_count": 418
+          },
+          {
+            "text": "1. **Find the proper divisors of 284**:\n   - First, find all divisors of 284.\n   - The smallest divisor must be 1.",
+            "token_count": 397
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-12:8436522e70c2ff51",
+      "batches": [
+        [
+          {
+            "text": "First, let's find all the positive divisors of 284. We start by checking for divisibility by smaller numbers.",
+            "token_count": 512
+          },
+          {
+            "text": "First, let's list all the positive divisors of 284. A proper divisor is any divisor that is less than 284 itself.",
+            "token_count": 342
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-15:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To find \\( w \\), we need to follow these steps:",
+            "token_count": 512
+          },
+          {
+            "text": "To solve the problem of finding \\( w \\), we need to rotate the complex number \\( z = 2 + \\sqrt{2} - (3 + 3\\sqrt{2})i \\) around another complex number \\( c = 2 - 3i \\) by an angle of \\( \\frac{\\pi}{4} \\) counter-clockwise. Let's go through the steps in detail.",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-15:fdf340212669be4f",
+      "batches": [
+        [
+          {
+            "text": "Step 1: Translate the problem into complex number form.\nLet \\( z = 2 + \\sqrt{2} - (3 + 3\\sqrt{2})i \\) and let \\( c = 2 - 3i \\).",
+            "token_count": 512
+          },
+          {
+            "text": "### Step 1: Understand the Problem",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-15:bc916ed53d622bc7",
+      "batches": [
+        [
+          {
+            "text": "To solve this, we'll follow these steps:",
+            "token_count": 512
+          },
+          {
+            "text": "To solve this problem, we'll first convert both \\( z \\) and \\( c \\) into polar form, then apply the rotation formula to find the final complex number.",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-15:81cfec01b5771fb2",
+      "batches": [
+        [
+          {
+            "text": "1. **Convert to Polar Form**:\n   Convert both \\( z \\) and \\( c \\) into their polar forms.",
+            "token_count": 512
+          },
+          {
+            "text": "1. **Convert Complex Numbers to Polar Form**:\n   - Convert both \\( z \\) and \\( c \\) into their polar forms.",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-17:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "To determine the smallest possible value of \\( c \\) for the given function \\( y = a \\sin(bx + c) + d \\), we need to analyze the provided graph and identify key features that relate to the amplitude, period, and phase shift.",
+            "token_count": 502
+          },
+          {
+            "text": "To find the smallest possible value of \\( c \\) for the given function \\( y = a \\sin(bx + c) + d \\), we need to analyze the graph and determine the phase shift, which is represented by \\( c \\).",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-17:7f19ecea42a2d818",
+      "batches": [
+        [
+          {
+            "text": "The amplitude is 2 (from the vertical stretch by a factor of 2). The period is \\( \\frac{2\\pi}{b} = 3 \\) radians, so \\( b = \\frac{2\\pi}{3} \\).",
+            "token_count": 171
+          },
+          {
+            "text": "The graph indicates that the sine wave has an amplitude of 2 (since it oscillates between -3 and 1), a period of \\( \\frac{2\\pi}{b} \\), and is shifted vertically by 1 unit up. This suggests \\( d = 1 \\) and \\( b > 0 \\).",
+            "token_count": 491
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-17:960001d14a2ae82e",
+      "batches": [
+        [
+          {
+            "text": "From the graph provided, we observe that the amplitude of the sine wave is 2, indicating \\( |a| = 2 \\).",
+            "token_count": 512
+          },
+          {
+            "text": "The graph provided shows an amplitude (which corresponds to \\(a\\)) of 2, indicating that \\( a = 2 \\). The vertical shift (which corresponds to \\(d\\)) is at 1, meaning \\( d = 1 \\).",
+            "token_count": 402
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-17:82e99fc8af0bf85d",
+      "batches": [
+        [
+          {
+            "text": "To find the smallest possible value of \\( c \\), we need to determine how many periods the function completes and where it starts its first period.",
+            "token_count": 446
+          },
+          {
+            "text": "To find the smallest possible value of \\( c \\), we need to analyze the graph and determine its phase shift. The general form of the sine function given is:",
+            "token_count": 393
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-22:e3b0c44298fc1c14",
+      "batches": [
+        [
+          {
+            "text": "Let's denote:\n- \\( D \\) as the number of dogs Denali is responsible for initially.\n- \\( N \\) as the number of dogs Nate is responsible for initially.\n- \\( x \\) as the group size under the new policy.",
+            "token_count": 512
+          },
+          {
+            "text": "To solve this problem, we need to set up an equation based on the given conditions and then solve for \\( x \\).",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-22:8cca9e1f1f0a79ca",
+      "batches": [
+        [
+          {
+            "text": "Let's denote the amount of pay per dog walked as \\( p \\).",
+            "token_count": 512
+          },
+          {
+            "text": "Let's denote the pay per dog as \\( p \\).",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-22:9204a49e74c8e5c3",
+      "batches": [
+        [
+          {
+            "text": "Given:\n- Initial responsibility: \\( D = 16 \\)\n- Initial responsibility: \\( N = 12 \\)",
+            "token_count": 512
+          },
+          {
+            "text": "To solve this problem, we need to determine the value of \\( x \\) such that the ratio of Denali's pay to Nate's pay remains unchanged under different conditions. Let\u2019s start by setting up equations based on the given information.",
+            "token_count": 512
+          }
+        ]
+      ]
+    },
+    {
+      "key": "math500-22:c6c4cade2408d8a9",
+      "batches": [
+        [
+          {
+            "text": "Given that:\n- Denali is responsible for 16 dogs.\n- Nate is responsible for 12 dogs.\n- They will be assigned or unassigned new dogs in groups of \\( x \\) dogs.",
+            "token_count": 512
+          },
+          {
+            "text": "Given:\n- Denali walks 16 dogs.\n- Nate walks 12 dogs.\n- The ratio of their pay is the same if they switch or redistribute dogs.",
+            "token_count": 512
+          }
+        ]
+      ]
+    }
+  ]
+}

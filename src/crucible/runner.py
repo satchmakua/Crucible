@@ -174,10 +174,12 @@ def run(config: RunConfig) -> RunSummary:
                 difficulty=problem.difficulty,
             )
         )
-    if isinstance(policy, RecordingPolicy):
-        policy.save()
-    if isinstance(process, RecordingProcessVerifier):
-        process.save()
+        # Flush cassettes after every problem: a real beam/MCTS capture on the GPU can
+        # TDR-crash mid-run, and a save only at the end would discard hours of work.
+        if isinstance(policy, RecordingPolicy):
+            policy.save()
+        if isinstance(process, RecordingProcessVerifier):
+            process.save()
     return summary
 
 

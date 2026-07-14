@@ -5,48 +5,111 @@
 > into measured accuracy, *with the verifier's compute counted*, and showing **why**
 > (which method is compute-optimal at which budget, and where the PRM's selection gap is).
 
-**§0 is the real artifact — a real model, real PRM, real data.** §1–§6 are the *cold,
-simulator* validation (a synthetic policy + a mock PRM) that runs with no GPU on every
-commit; read them as "the harness measures the right things correctly," not "model X scores
-Y." The real curve is §0.
+**§0 is the real artifact — a real model, real PRM, real data, 3 seeds.** §1–§6 are the
+*cold, simulator* validation (a synthetic policy + a mock PRM) that runs with no GPU on
+every commit; read them as "the harness measures the right things correctly," not "model X
+scores Y." The real curve is §0.
 
-## 0. The real lift curve — accuracy vs test-time compute on GSM8K
+## 0. The real lift curve — accuracy vs test-time compute on MATH-500 (3 seeds)
+
+![Real MATH-500 accuracy-vs-compute curve](math500-lift-curve.png)
+
+On the dev machine (RTX 5070 Ti Laptop, 12 GB, `torch 2.11+cu128` / sm_120): **MATH-500
+problems 0–39, three seeds** (0/1/2 → 120 pooled observations), policy `qwen2.5:1.5b-instruct`
+(Ollama, GPU), verifier the real **Skywork-o1-Open-PRM-Qwen-2.5-1.5B** (GPU). Each problem is
+sampled 8× *once per seed*, then every selector is evaluated at each N over those samples
+(`crucible bench`). 95% Wilson CIs; x-axis = **total tokens/problem, policy + verifier**.
+
+| N | pass@1 | majority | PRM | oracle | tokens/problem (majority · PRM) |
+|---|---|---|---|---|---|
+| 1 | **38.3%** | 38.3% | 38.3% | 38.3% | 503 |
+| 2 | — | 38.3% | 45.0% | 50.0% | 985 · 1,970 |
+| 4 | — | 45.0% | **53.3%** | 61.7% | 1,990 · 3,981 |
+| 8 | — | 52.5% | **55.0%** | **70.0%** | 4,015 · 8,029 |
+
+95% CIs at N=8: pass@1 [30, 47], majority [44, 61], PRM [46, 64], oracle [61, 77].
+
+The three things this project set out to show, now on a real model and harder data than
+GSM8K, stated with the honest caveats:
+
+1. **Test-time compute buys accuracy.** Single-shot pass@1 is 38.3%; with search, oracle
+   reaches **70%** at N=8 — a perfect selector nearly doubles accuracy from the *same*
+   frozen 1.5B model. Every selector's curve rises with compute.
+2. **The learned verifier beats self-consistency — at matched N.** On *identical* samples
+   the PRM selects better than majority at every N ≥ 2 (N=4: 53.3% vs 45.0%, +8.3 pt; N=8:
+   55.0% vs 52.5%). **The honest caveat is compute:** the PRM's forward passes cost ~2×, so
+   at matched *tokens* (~4k) majority@8 (52.5%) and PRM@4 (53.3% at 3,981 tok) are a wash —
+   the small 1.5B PRM's per-N edge doesn't yet clear its own overhead. This is exactly the
+   effect an easier sample hides: the earlier 20-problem GSM8K pilot (§0.3) showed a cleaner
+   PRM win because GSM8K is easier; on harder MATH-500 with a small PRM the margin is thin.
+3. **The selection gap is real and large.** Oracle 70% ≫ PRM 55% is the headroom the small
+   PRM *doesn't* capture (a 1.5B PRM is a weak selector; ProcessBench F1 ≈ 56 even for 7B
+   PRMs). The reported metric is always the outcome verifier on the chosen trace, never a PRM
+   score. Closing that gap needs a stronger PRM (the family-matched Qwen 7B PRM) — the
+   documented next step, not something this stack claims.
+
+### 0.1 The search ladder on the hardest problems — beam & MCTS make real contact
+
+![Beam/MCTS on the hardest MATH-500 problems](math500-hard-search.png)
+
+The point of the ladder is the *hard* subset. On the **8 hardest problems** (MATH-500
+levels 4–5 within the captured range, where the 1.5B policy's **pass@1 is 0%**), PRM-guided
+**beam** and **MCTS** run end-to-end on the real stack (recorded, and they replay offline).
+The honest result — every token counted:
+
+| method | accuracy | tokens/problem |
+|---|---|---|
+| best-of-N majority @8 | 4.2% | 5,413 |
+| best-of-N **PRM** @8 | 16.7% | 10,826 |
+| best-of-N oracle @8 (cheat) | 45.8% | 5,413 |
+| **beam** (width 2, 5 steps) | 0.0% (0/8) | 36,753 |
+| **MCTS** (budget 10k) | 12.5% (1/8) | 11,820 |
+
+**Stepwise search does *not* win here, and we show it.** Beam solves none at ~37k
+tokens/problem; MCTS (budget-capped, so cheaper) solves one at ~12k. Neither is on the
+compute-optimal frontier — best-of-N dominates. The cause is concrete: a non-reasoning
+1.5B *instruct* model, asked to *continue* a partial trace, **restarts the solution**
+instead, so PRM-guided stepwise search can't assemble a coherent chain — while best-of-N's
+independent full samples suit this policy. Beam/MCTS earning their keep is a
+harder-problem / stronger-(reasoning)-policy phenomenon (DESIGN §6.3); this run is the
+honest "measured, doesn't help *here*" entry, on real data, with real compute counted.
+
+### 0.2 Small-beats-big? Not on this stack — the honest baseline (H2)
+
+The Snell-2024 hope is that a small model + compute-optimal search matches a bigger model
+at matched compute. Measured here, it **does not**:
+
+| model + method | accuracy | tokens/problem |
+|---|---|---|
+| **`qwen2.5:7b-instruct` pass@1** | **67.5%** [52, 80] | **524** |
+| `qwen2.5:1.5b-instruct` pass@1 | 38.3% | 503 |
+| 1.5B + PRM best-of-N @8 | 55.0% | 8,029 |
+| 1.5B + oracle best-of-N @8 (cheat) | 70.0% | 4,015 |
+
+The 7B baseline (same 40 problems) reaches **67.5% at ~524 tokens** — the 1.5B needs **~8k
+tokens** (16×) of PRM-guided search to reach 55%, and only the *oracle cheat* matches the
+7B, at 8× the compute. So on MATH-500 with this small PRM, **the bigger model is strictly
+more compute-efficient.** (Even this flatters the small model: the axis counts raw tokens,
+and a 7B token costs ~4.7× the FLOPs of a 1.5B token.) Small-beats-big needs a *stronger*
+selector than the 1.5B Skywork PRM — the honest gate on H2. The instrument reports the
+unfavorable result faithfully; that is the point of it.
+
+### 0.3 The earlier GSM8K curve (single seed) — where the PRM win is cleaner
 
 ![Real GSM8K accuracy-vs-compute curve](gsm8k-lift-curve.png)
 
-On the dev machine (RTX 5070 Ti Laptop, 12 GB, `torch 2.11+cu128` / sm_120): **20 real
-GSM8K** problems, policy `qwen2.5:1.5b-instruct` (Ollama, GPU), verifier the real
-**Skywork-o1-Open-PRM-Qwen-2.5-1.5B** (GPU). Each problem sampled 8× *once*, then every
-selector evaluated at each N over those samples (`crucible.bench`):
+The first real capture — **20 GSM8K** problems, same 1.5B policy + 1.5B PRM, one seed —
+where the easier data lets the small PRM separate cleanly: pass@1 40% → PRM@8 **60%** vs
+majority 50%, oracle **90%**. It stands as the "easy-data" contrast to the harder MATH-500
+headline above; captured to `tests/fixtures/gsm8k-bestofn.json` and replayed in CI.
 
-| N | pass@1 | majority | PRM | oracle |
-|---|---|---|---|---|
-| 1 | **40%** | 40% | 40% | 40% |
-| 2 | — | 40% | 50% | 60% |
-| 4 | — | 45% | **60%** | 75% |
-| 8 | — | 50% | **60%** | **90%** |
-
-(95% Wilson CIs on the plot; x-axis = **total tokens/problem, policy + verifier** — the
-PRM's forward passes counted, which is why the PRM line sits ~2× to the right.)
-
-The three things this project set out to show, now on a real model:
-1. **Test-time compute buys accuracy.** Single-shot pass@1 is 40%; with search, oracle
-   reaches **90%** at N=8 — a perfect verifier more than doubles accuracy from the *same*
-   frozen 1.5B model. Every selector's curve rises with compute.
-2. **The learned verifier earns its keep.** The real PRM reaches **60%** at N=4/8 vs
-   verifier-free **majority's 50%** — a real +10 pt lift from a *learned* step-reward model
-   over self-consistency. (This is the effect a smaller/easier sample can hide: an 8-problem
-   pilot showed PRM ≈ majority; on 20 problems the PRM clearly separates.)
-3. **The selection gap is real and honest.** Oracle 90% > PRM 60% is the headroom the PRM
-   *doesn't* capture — a small open PRM is an imperfect selector (ProcessBench F1 ≈ 56 even
-   for the best 7B PRMs), and the reported metric is always the outcome verifier on the
-   chosen trace, never a PRM score. The gap is exactly what a stronger PRM / harder data
-   (H1/H2) is expected to close.
-
-**Reproducible without a GPU.** The run is captured to `tests/fixtures/gsm8k-bestofn.json`
-(the 8 traces per problem + their PRM scores + correctness); `tests/test_cassette.py`
-replays it offline and reproduces every number above — a real result that regenerates in CI
-with no model (the "run live once, commit a fixture" pattern, now covering the PRM side).
+**Everything above reproduces without a GPU.** The best-of-N captures
+(`tests/fixtures/math500-bestofn-seed{0,1,2}.json`), the recorded **beam** and **MCTS** runs
+(step + PRM cassettes), the **7B** baseline, and the GSM8K curve are all committed;
+`tests/test_cassette.py` replays each offline and reproduces **every number in this section**
+with no model and no GPU — the "run live once, commit a fixture" pattern, now covering the
+policy *and* the PRM *and* stepwise search. Regenerate the headline curve with
+`crucible bench curve tests/fixtures/math500-bestofn-seed*.json`.
 
 ## 1. The headline: accuracy vs test-time compute
 
@@ -123,9 +186,22 @@ is unchanged; only the verifier differs (DESIGN §6.2).
 
 ## 6. Threats to validity
 
-- **Simulators, not models.** §1–§4 are mechanism checks; real-model numbers are pending.
+- **Simulators vs models.** §0 is real (model + PRM + data); §1–§5 are mechanism checks on
+  a synthetic policy + mock PRM. Read §1–§5 as "the harness measures the right things," not
+  as model scores.
+- **Seed pooling.** §0's Wilson CIs pool 40 problems × 3 seeds as 120 observations, matching
+  `sweep.py`'s convention — but the three seeds share the same 40 problems, so the effective
+  sample is correlated and the CIs are mildly optimistic. Treat close margins (PRM vs
+  majority) as suggestive, not decisive; the *paired* per-N comparison (same samples) is the
+  stronger claim.
+- **Raw tokens, not FLOPs.** The compute axis counts generated tokens, not FLOPs; a 7B token
+  costs ~4.7× a 1.5B token. This *flatters* small models, and §0.2's small-beats-big
+  negative holds even so (the 7B wins on the axis that favors the 1.5B).
+- **Beam/MCTS on a non-reasoning policy.** §0.1's stepwise-search result is bounded by the
+  1.5B instruct policy restarting rather than continuing partial traces; a reasoning policy
+  (or a continuation-tuned prompt) is the fair test of beam/DVTS, not this stack.
 - **Verifier gaming.** The PRM can be reward-hacked; that's why we always report the
-  *outcome* metric and show the PRM-vs-oracle gap (§4). On real runs, inspect a sample of
+  *outcome* metric and show the PRM-vs-oracle gap (§0, §4). On real runs, inspect a sample of
   "passed" traces.
 - **Step segmentation** (`\n\n` + token cap) materially affects beam/MCTS and is recorded
   per run; it should be ablated on real data.

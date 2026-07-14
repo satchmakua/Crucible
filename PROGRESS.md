@@ -5,13 +5,15 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking
 "what got done and why" companion.
 
-**Current phase:** **M1–M7 built; the real lift curve is captured.** The real stack runs
-on the RTX 5070 Ti (Blackwell torch + Ollama 1.5B + Skywork 1.5B PRM), and `docs/RESULTS.md
-§0` now **leads with a real GSM8K accuracy-vs-compute curve** (pass@1 40% → oracle 90%; PRM
-beats majority) that regenerates offline in CI from a committed cassette. Hardening: **H3 ✓**
-(cassettes both sides), **H4 ✓** (8 bugs fixed), **H1 substantially met**. **118 tests** green.
-Remaining polish: the ≥3-seed **MATH-500** curve + beam/mcts real cells (H1), small-beats-big
-(H2) — all now ordinary runs on a validated stack.
+**Current phase:** **M1–M7 built; the real lift curves are captured — 3-seed MATH-500, real
+beam/MCTS, and a 7B baseline.** `docs/RESULTS.md §0` now **leads with a real 3-seed MATH-500
+accuracy-vs-compute curve** (pass@1 38.3% → oracle 70%; PRM beats majority at every N on
+identical samples) that regenerates offline in CI, with the honest caveats counted (the PRM's
+~2× compute makes it ~a wash with majority at matched tokens; the 7B baseline is more
+compute-efficient than 1.5B+search, so small-beats-big does **not** hold here; real beam/MCTS
+are the most expensive and don't win on this non-reasoning stack). Hardening: **H1 ✓**, **H3 ✓**
+(cassettes now cover policy + PRM + stepwise search), **H4 ✓**; **H2 measured (honest negative)**.
+**162 tests** green. See the newest entry below.
 
 ## State of the tree
 
@@ -25,11 +27,14 @@ Remaining polish: the ≥3-seed **MATH-500** curve + beam/mcts real cells (H1), 
 | Mock policy (ScriptedPolicy) | `inference/mock.py` | ✅ M0 |
 | Synthetic policy (seeded sim) | `inference/synthetic.py` | ✅ M2 |
 | Stepwise policy + step PRM (demo pair) | `synthetic_stepwise.py` | ✅ M4 |
-| Ollama policy | `inference/ollama.py` | ✅ M1 |
+| Ollama policy (seeded per-request) | `inference/ollama.py` | ✅ M1 / H1 |
 | Math CoT prompt builder | `prompts.py` | ✅ M1 |
 | Answer extraction | `verify/answer_extract.py` | ✅ M0 |
-| Math outcome verifier | `verify/math_outcome.py` | ✅ M0 |
-| PRM: mock + real adapters | `verify/process.py` | ✅ M3 (real PRM unrun) |
+| Math outcome verifier (+ compound-answer fix) | `verify/math_outcome.py` | ✅ M0 / H1 |
+| PRM: mock + real adapters | `verify/process.py` | ✅ M3 (real, run on GPU) |
+| Cassettes: policy + step + PRM record/replay | `inference/cassette.py` | ✅ H3 (both sides) |
+| `crucible bench` (record/merge/curve) | `bench.py`, `cli.py` | ✅ H1/H3 (real curve) |
+| `math500-hard` (levels 4–5) | `data/hf.py` | ✅ H1 |
 | Code sandbox + outcome verifier | `verify/code_sandbox.py`, `verify/code_outcome.py` | ✅ M5 (opt-in) |
 | pass1 strategy + registry | `search/` | ✅ M0 |
 | best_of_n + selectors (maj/oracle/prm) | `search/best_of_n.py`, `search/selectors.py` | ✅ M3 |
@@ -44,9 +49,61 @@ Remaining polish: the ≥3-seed **MATH-500** curve + beam/mcts real cells (H1), 
 | Selection-gap comparison + bar chart | `runner.run_comparison`, `report.py` | ✅ M3 |
 | Compute-optimal frontier + per-difficulty | `analyze.py` | ✅ M7 |
 | Results report | `docs/RESULTS.md` | ✅ M7 |
-| CLI (run/report/sweep/compare/version) | `cli.py` | ✅ (all real) |
+| CLI (run/report/sweep/compare/bench/version) | `cli.py` | ✅ (all real) |
 
 ---
+
+## 2026-07-14 — The real MATH-500 headline: `crucible bench`, real beam/MCTS, honest H1/H2
+
+The "shinier version": the real curve is now **3-seed MATH-500** (not single-seed GSM8K), the
+capture path is a **productized CLI verb**, beam/MCTS make **real-model contact** (and replay
+offline), and the numbers are reported with every weakness surfaced.
+
+**What shipped:**
+- **`crucible bench` (record / merge / curve)** (`bench.py`, `cli.py`) — the capture path is
+  now one command, not an interactive Python session. `record` samples N×/problem once,
+  scores each with the outcome verifier + PRM, and writes a cassette (with `--offset`/`--limit`
+  chunking and **incremental per-problem save** — a TDR crash saves progress and prints the
+  resume offset); `merge` concatenates per-seed chunks (guarding duplicate problem ids +
+  identity-meta mismatch); `curve` pools any number of cassettes into the accuracy-vs-compute
+  curve + frontier offline, with `--difficulty` / `--restrict-to-runs` filters and `--run`
+  overlays for beam/MCTS cells (recomputed from `results.csv` on the *matched* problem subset).
+- **Step + PRM cassettes (H3 remainder)** (`inference/cassette.py`) — `RecordingPolicy` now
+  records `sample_step` batches (keyed by problem + prefix hash, FIFO); new
+  `RecordingProcessVerifier`/`CassetteProcessVerifier` record/replay PRM `score_steps`. A live
+  **beam/MCTS run now replays offline call-for-call** (a miss raises — divergence is a failure,
+  not a silent zero). `runner.run` flushes cassettes after every problem.
+- **Seeded Ollama sampling** (`inference/ollama.py`) — per-request seeds derived from
+  (run seed, problem, sample index), so multi-seed captures are real and reproducible;
+  `sample_step` now charges the **full generation's `eval_count`** to its step, so beam/MCTS
+  land on the same honest token axis as best-of-N (was a word-count undercount).
+- **`math500-hard`** dataset (levels 4–5) + **`SyntheticPolicy.sample_step`** (a real stepwise
+  chain, so the synthetic backend can drive beam/MCTS cold) + a **compound-answer fix** in
+  `math_outcome.py` ($-wrapping so tuples/intervals/coordinates parse — this alone lifted the
+  seed-0 MATH-500 pass@1 on several problems).
+
+**The real runs (RTX 5070 Ti, Ollama `qwen2.5:1.5b-instruct` + Skywork 1.5B PRM):**
+- **3-seed MATH-500** (problems 0–39 × seeds 0/1/2): pass@1 **38.3%** → oracle@8 **70%**; PRM
+  beats majority at every N on identical samples (N=4: 53.3% vs 45.0%). Honest caveat: PRM's
+  ~2× compute ≈ neutralizes the edge at matched tokens. Fixtures `math500-bestofn-seed{0,1,2}`.
+- **Real beam + MCTS** on the 8 hardest problems (pass@1 = 0% there): beam 0/8 @ ~37k tok,
+  MCTS 1/8 @ ~12k tok — honestly the most expensive, not on the frontier; the 1.5B instruct
+  policy *restarts* rather than continues a partial trace. Recorded → replay offline.
+- **7B baseline** (`qwen2.5:7b-instruct` pass@1): **67.5% @ 524 tok** — more compute-efficient
+  than 1.5B+search, so **small-beats-big fails** on this stack (needs a stronger PRM). Recorded.
+
+**How it was verified:** ruff + mypy(strict) clean; **162 tests** (bench CLI cold, step/PRM
+cassette round-trips, seeded-Ollama payloads, compound-answer equivalence, and offline
+reproduction of every §0 number). Before the GPU runs, a **multi-agent adversarial review** of
+the diff surfaced 21 confirmed findings (silent fixture-corruption class: mixed-PRM pooling,
+unvalidated `--n-values`, blind merge, unfiltered overlays, non-incremental capture save) — all
+fixed and regression-tested. The incremental-save fix then paid off live: seed 2 TDR-crashed at
+problem 37/40 and lost nothing (resumed from the recorded offset).
+
+**Gotchas / honest notes:** seed pooling treats 40 problems × 3 seeds as 120 obs (matches
+`sweep.py`; CIs mildly optimistic since seeds share problems). The token axis is raw tokens,
+not FLOPs (flatters small models — the H2 negative holds anyway). Beam/MCTS are bounded by the
+non-reasoning policy; a reasoning policy is the fair test of DVTS.
 
 ## The shiny artifact — a real GSM8K lift curve · 2026-07-12
 

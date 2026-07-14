@@ -97,6 +97,60 @@ def test_real_gsm8k_lift_curve_reproduces_offline() -> None:
     assert hits("best_of_n", "prm", 8) > hits("best_of_n", "majority", 8)
 
 
+# --- The real 3-seed MATH-500 lift curve (§0), reproduced offline from its cassettes.
+_MATH500_FIXTURES = [
+    Path(__file__).parent / "fixtures" / f"math500-bestofn-seed{s}.json" for s in (0, 1, 2)
+]
+
+
+_7B_FIXTURE = Path(__file__).parent / "fixtures" / "math500-7b-pass1.json"
+
+
+def test_real_7b_baseline_reproduces_offline() -> None:
+    if not _7B_FIXTURE.exists():  # pragma: no cover
+        import pytest
+
+        pytest.skip("no 7B baseline cassette recorded yet")
+    problems, records = load_cassette(_7B_FIXTURE)
+    assert len(problems) == 40
+    # H2 baseline: qwen2.5:7b-instruct pass@1 = 27/40 = 67.5% on MATH-500 (problems
+    # 0-39) at ~524 tokens/problem. This BEATS the 1.5B + search at matched compute —
+    # small does not beat big on this stack (the honest negative; see docs/RESULTS.md §0).
+    correct = _replay_pass_at_1(problems, records)
+    assert correct == 27
+
+
+def test_real_math500_lift_curve_reproduces_offline() -> None:
+    if not all(f.exists() for f in _MATH500_FIXTURES):  # pragma: no cover
+        import pytest
+
+        pytest.skip("no MATH-500 bench cassettes recorded yet")
+    from crucible.bench import curve_cells, load_samples
+
+    records = [r for f in _MATH500_FIXTURES for r in load_samples(f)]
+    assert len(records) == 120  # 40 problems x 3 seeds, pooled
+
+    cells = curve_cells(records, [1, 2, 4, 8], has_prm=True)
+
+    def hits(method: str, selection: str, n: int) -> int:
+        cell = next(
+            c for c in cells if c["method"] == method and c["selection"] == selection and c["n"] == n
+        )
+        assert cell["total"] == 120
+        return int(cell["correct"])
+
+    # The real numbers behind docs/math500-lift-curve.png (Ollama 1.5B + Skywork 1.5B PRM,
+    # 3 seeds, MATH-500 problems 0-39). pass@1 46/120 = 38.3%; oracle@8 84/120 = 70%.
+    assert hits("pass1", "none", 1) == 46
+    assert hits("best_of_n", "oracle", 8) == 84  # search nearly doubles pass@1
+    assert hits("best_of_n", "prm", 8) == 66  # PRM@8 = 55%
+    assert hits("best_of_n", "majority", 8) == 63  # majority@8 = 52.5%
+    # The headline, on identical samples: the learned PRM beats verifier-free majority
+    # at every N>=2 (the effect a small/easy pilot hides; here on 3-seed MATH-500).
+    for n in (2, 4, 8):
+        assert hits("best_of_n", "prm", n) > hits("best_of_n", "majority", n), n
+
+
 # --- Step + PRM cassettes (the H3 remainder): beam/MCTS runs replay offline. ---------
 
 
@@ -159,3 +213,57 @@ def test_prm_cassette_raises_on_unrecorded_prefix(tmp_path: Path) -> None:
         verifier.score_steps(
             Problem(id="p", prompt="?", answer="1"), [Step(text="s", token_count=1)]
         )
+
+
+# --- The real beam/MCTS cells (§0), a live PRM-guided search reproduced with no GPU. ---
+_FIXDIR = Path(__file__).parent / "fixtures"
+
+
+def _replay_real_search(
+    strategy: BeamStrategy | MCTSStrategy, cfg: RunConfig, name: str
+) -> tuple[int, int, int]:
+    steps = _FIXDIR / f"math500-{name}-hard-steps.json"
+    prm = _FIXDIR / f"math500-{name}-hard-prm.json"
+    if not (steps.exists() and prm.exists()):  # pragma: no cover
+        import pytest
+
+        pytest.skip(f"no real {name} cassette recorded yet")
+    bundle = load_bundle(steps)
+    policy = CassettePolicy(bundle.traces, bundle.steps)
+    process = CassetteProcessVerifier(load_prm_cassette(prm))
+    correct = tokens = 0
+    for problem in bundle.problems:
+        chosen = strategy.search(problem, policy, _OUTCOME, process, cfg)
+        correct += _OUTCOME.verify(problem, chosen).correct
+        tokens += chosen.compute.total_tokens
+    return len(bundle.problems), correct, tokens
+
+
+def test_real_beam_cell_reproduces_offline() -> None:
+    cfg = RunConfig(
+        method="beam", dataset="math500-hard", beam_width=2, beam_expansions=2,
+        max_steps=5, prm="cassette", prm_aggregate="mean",
+        policy=PolicyConfig(backend="cassette", model="x", max_tokens=512),
+    )
+    total, correct, tokens = _replay_real_search(BeamStrategy(), cfg, "beam")
+    # The honest real-model beam cell: on the 8 hardest MATH-500 problems (levels 4-5,
+    # where the 1.5B policy's pass@1 is 0%), PRM-guided beam solves none at ~37k
+    # tokens/problem — stepwise search can't help a non-reasoning policy that restarts
+    # rather than continues a partial trace. Reproduced from the recorded run, no GPU.
+    assert total == 8
+    assert correct == 0
+    assert tokens == 294026
+
+
+def test_real_mcts_cell_reproduces_offline() -> None:
+    cfg = RunConfig(
+        method="mcts", dataset="math500-hard", beam_expansions=2, max_steps=5,
+        budget_tokens=10000, mcts_max_sims=30, mcts_c_puct=1.4, prm="cassette",
+        prm_aggregate="mean", policy=PolicyConfig(backend="cassette", model="x", max_tokens=512),
+    )
+    total, correct, tokens = _replay_real_search(MCTSStrategy(), cfg, "mcts")
+    # Budget-capped MCTS on the same 8 hardest problems: 1/8 at ~12k tokens/problem —
+    # cheaper than beam (the budget bites) and it solves one, but still below best-of-N.
+    assert total == 8
+    assert correct == 1
+    assert tokens == 94556

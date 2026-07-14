@@ -9,17 +9,22 @@ Most people only *consume* reasoning models; Crucible builds the machinery under
 and **measures the lift** — accuracy as a function of test-time compute over a small
 open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
 
-**Status:** **The roadmap is built (M0–M7) and the real lift curve is captured.** On real
-GSM8K with a real 1.5B policy (Ollama) + a real 1.5B PRM (Skywork, GPU), search lifts
-**pass@1 40% → 90% (oracle) at N=8**, and the **learned PRM beats verifier-free majority
-(60% vs 50%)** — the honest headline, [docs/RESULTS.md §0](docs/RESULTS.md), reproducible
-offline from a committed cassette. Behind one policy/verifier/search interface: **best-of-N**
-(M2), **PRM-weighted selection + the selection gap** (M3), **PRM-guided beam/DVTS** (M4), a
+**Status:** **The roadmap is built (M0–M7) and the real lift curves are captured — 3-seed
+MATH-500, honest numbers.** On real **MATH-500** (3 seeds) with a frozen 1.5B policy (Ollama)
++ a real 1.5B PRM (Skywork, GPU), search lifts **pass@1 38% → 70% (oracle) at N=8**, and on
+identical samples the **learned PRM beats self-consistency majority at every N** (N=4: 53% vs
+45%) — with the honest caveats counted: the PRM's ~2× compute makes it roughly a wash with
+majority at matched *tokens*, and a **7B baseline (67.5% pass@1) is more compute-efficient
+than 1.5B + search** (small-beats-big does *not* hold on this stack). Real **beam** and
+**MCTS** cells run on the hardest subset and are honestly the most expensive / not winning
+here. The full story: [docs/RESULTS.md §0](docs/RESULTS.md) — every number reproduces offline
+from committed cassettes. Behind one policy/verifier/search interface: **best-of-N** (M2),
+**PRM-weighted selection + the selection gap** (M3), **PRM-guided beam/DVTS** (M4), a
 sandboxed **code track** (M5), **MCTS over reasoning steps** (M6), the **compute-optimal
-report** (M7), plus review-driven hardening (H3 cassettes ✓, H4 adversarial fixes ✓). See
-[docs/RESULTS.md](docs/RESULTS.md), [ROADMAP.md](ROADMAP.md), and [PROGRESS.md](PROGRESS.md).
+report** (M7), plus review-driven hardening (H1 MATH-500 curve ✓, H3 cassettes ✓, H4
+adversarial fixes ✓). See [ROADMAP.md](ROADMAP.md) and [PROGRESS.md](PROGRESS.md).
 
-![Real GSM8K accuracy-vs-compute curve](docs/gsm8k-lift-curve.png)
+![Real MATH-500 accuracy-vs-compute curve](docs/math500-lift-curve.png)
 
 ---
 
@@ -50,8 +55,23 @@ python -m crucible run --method pass1 --dataset gsm8k --policy ollama `
     --model qwen2.5:1.5b-instruct --limit 20
 ```
 
-**The lift curve (M2):** produce the headline accuracy-vs-compute curve offline (no
-model needed — it uses a synthetic policy):
+**The real lift curve (H1/H3):** capture it once on a GPU, regenerate it offline forever.
+`bench record` samples N×/problem and scores each with the outcome verifier + PRM into a
+cassette; `bench curve` computes accuracy-vs-compute for every N/selector from the cassette
+(no GPU). Chunk long captures with `--offset`/`--limit` (a crash saves progress and prints
+the resume offset), `merge` the chunks, and pool seeds by passing several cassettes:
+
+```powershell
+# One line per seed (needs the prm+datasets extras, Ollama, and a GPU):
+crucible bench record --dataset math500 --model qwen2.5:1.5b-instruct `
+    --prm Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B --max-n 8 --limit 40 --seed 0 --out runs/m500-s0.json
+crucible bench curve runs/m500-s0.json runs/m500-s1.json runs/m500-s2.json   # pooled curve, offline
+
+# Reproduce the committed headline with no GPU:
+crucible bench curve tests/fixtures/math500-bestofn-seed*.json
+```
+
+**The offline lift-curve demo (M2):** the synthetic-policy curve, no model needed:
 
 ```powershell
 python -m crucible sweep configs/sample-sweep.yaml   # writes runs/sweep-*/curve.png
@@ -92,6 +112,7 @@ python -m crucible run --dataset code-sample --policy mock --allow-code-exec   #
 | `crucible run [...]` | Run one experiment (method × dataset × backend) and report it |
 | `crucible report <run_dir>` | Print the metrics from a past run |
 | `crucible sweep <config.yaml>` | Grid → the accuracy-vs-compute curve (M2) |
+| `crucible bench record/merge/curve` | Capture a real lift curve once (sample N×/problem, score offline), pool seeds, overlay beam/MCTS runs — the headline artifact (H1/H3) |
 | `crucible compare` | Majority/PRM/oracle on the same samples → the selection gap (M3) |
 | `crucible run --dataset code-sample --allow-code-exec` | Code track: sandboxed execution (M5) |
 | `crucible run … --record <path>` | Record a live run to a cassette that replays offline in CI (H3) |

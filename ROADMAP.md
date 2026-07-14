@@ -43,23 +43,24 @@ The milestone checklist. Build the next unchecked milestone in order.
   --policy ollama --model <m> --limit 20` prints a pass@1 with a Wilson CI and writes
   a record. (Install: `pip install -e ".[datasets]"`.)
 
-- [ ] **M2 — Best-of-N + the lift curve.** Add the `best_of_n` strategy (majority@N
+- [x] **M2 — Best-of-N + the lift curve.** Add the `best_of_n` strategy (majority@N
   and oracle-best-of-N selection) and the `sweep`/`report` accuracy-vs-compute curve
   (matplotlib), plotting accuracy against **total tokens** (compute accounting made
   visible).
-  _(Built and self-verified 2026-06-27 on the offline synthetic backend — `curve.png`
-  shows best-of-N rising above pass@1 with compute on the x-axis; review it / run a
-  real-model sweep, then check this box.)_
+  _(✓ real 2026-07-14: the headline 3-seed MATH-500 best-of-N curve — pass@1 38.3% →
+  oracle@8 70% — is captured via `crucible bench` and reproduces offline. Also self-verified
+  cold on the synthetic backend.)_
   **Test (offline, runs cold):** `crucible sweep configs/sample-sweep.yaml` then
   `crucible report <sweep_dir>` → a `curve.png` where best-of-N (oracle, and majority
   for a >50% policy) rises above pass@1, with tokens on the x-axis. **Real-model
   variant:** point a sweep at `dataset: gsm8k`, `backend: ollama` (needs M1's setup).
 
-- [ ] **M3 — PRM integration (learned verifier).** Add a `ProcessVerifier` adapter for
+- [x] **M3 — PRM integration (learned verifier).** Add a `ProcessVerifier` adapter for
   an open PRM (transformers/`prm` extra); **PRM-weighted best-of-N**; the `compare`
   path scores majority / PRM / oracle on the *same* samples to expose the selection gap.
-  _(Built and self-verified 2026-06-27 with a mock PRM — `comparison.png` shows
-  oracle ≥ prm ≥ majority with PRM compute counted; run a real PRM, then check this box.)_
+  _(✓ real 2026-07-14 with the Skywork 1.5B PRM on the GPU: on identical MATH-500 samples,
+  oracle (70%) ≥ prm (55%) ≥ majority (52.5%) at N=8, PRM's forward-pass compute counted;
+  the selection gap is large and honest (RESULTS §0). Also self-verified cold with a mock PRM.)_
   **Test (offline, runs cold):** `crucible compare` → a table + `comparison.png` where
   **oracle ≥ prm ≥ majority** and the prm bar costs more tokens/problem (its forward
   passes counted). **Real-model variant:** `crucible compare --policy ollama --model
@@ -69,8 +70,12 @@ The milestone checklist. Build the next unchecked milestone in order.
   (`sample_step`): expand top-k partials, score with the PRM, prune; plot beam vs
   best-of-N at matched compute.
   _(Built and self-verified 2026-06-27 on a synthetic stepwise task — the curve shows
-  beam reaching 100% at ~half the tokens best-of-N needs; run a real-model beam, then
-  check this box.)_
+  beam reaching 100% at ~half the tokens best-of-N needs. **Real contact 2026-07-14:** a
+  recorded PRM-guided beam ran on the 8 hardest MATH-500 problems and **replays offline** —
+  but the honest result is a **negative**: 0/8 at ~37k tokens/problem, because the
+  non-reasoning 1.5B instruct policy *restarts* rather than continues a partial trace, so
+  stepwise search can't assemble a chain (RESULTS §0.1). The beam>best-of-N crossover is a
+  reasoning-policy phenomenon; box stays open until it's shown on real data.)_
   **Test (offline, runs cold):** `crucible sweep configs/beam-sweep.yaml` → a `curve.png`
   where the **beam** line sits above **best_of_n** at matched tokens (beam hits 100% at
   ~1.1k tok/problem vs ~2.4k for best-of-N; pass1 ≈ 0%). **Real-model variant:**
@@ -96,9 +101,12 @@ The milestone checklist. Build the next unchecked milestone in order.
   selection / expansion / evaluation / backup over the step tree, budgeted by total
   tokens. The full search ladder, plotted together.
   _(Built and self-verified 2026-06-28 — MCTS saturates the synthetic stepwise task; on
-  this easy/shallow task it's the **most expensive** of the tree methods (honest result:
-  beam ≈1.1k tok, best-of-N ≈2.4k, MCTS ≈6k to reach 100%). Its edge over beam is a
-  hard-problem/real-model phenomenon. Run a real-model MCTS, then check this box.)_
+  this easy/shallow task it's the **most expensive** of the tree methods. **Real contact
+  2026-07-14:** a recorded, budget-capped MCTS ran on the same 8 hardest MATH-500 problems
+  and **replays offline** — 1/8 (12.5%) at ~12k tokens/problem: cheaper than beam (the budget
+  bites) and it solves one, but still below best-of-N and not on the frontier (RESULTS §0.1).
+  Its edge over beam/best-of-N is a hard-problem/reasoning-policy phenomenon; box stays open
+  until it's shown on real data.)_
   **Test (offline, runs cold):** `crucible sweep configs/beam-sweep.yaml` plots all four
   methods; MCTS reaches 100% (at higher compute than beam). **Real-model variant:**
   `crucible run --method mcts --budget-tokens 8000 --dataset math500 --policy ollama
@@ -106,13 +114,14 @@ The milestone checklist. Build the next unchecked milestone in order.
 
 ## Phase 3 — The deliverable
 
-- [ ] **M7 — Compute-optimal & the report.** The **compute-optimal frontier** (best
+- [x] **M7 — Compute-optimal & the report.** The **compute-optimal frontier** (best
   method at each budget — Snell-style), multi-seed curves with Wilson CIs, per-difficulty
   analysis, and a written results report with the headline plot.
-  _(Built and self-verified 2026-06-28 — `analyze.compute_optimal_frontier` +
-  `accuracy_by_difficulty`, multi-seed pooled sweeps, the frontier overlaid on the curve,
-  and `docs/RESULTS.md`. Run the sweep on a real backend to fill in real numbers, then
-  check this box.)_
+  _(✓ real 2026-07-14 — `docs/RESULTS.md §0` leads with the real 3-seed MATH-500
+  accuracy-vs-compute curve + compute-optimal frontier + Wilson CIs, with beam/MCTS overlaid
+  on the hard subset and the 7B baseline; the synthetic ladder is demoted to mechanism
+  validation. Also self-verified cold — `analyze.compute_optimal_frontier`, multi-seed pooled
+  sweeps, the frontier overlay.)_
   **Test (offline, runs cold):** `crucible sweep configs/results.yaml` (3 seeds, full
   ladder) → `curve.png` with the dashed compute-optimal frontier + a frontier table;
   [`docs/RESULTS.md`](docs/RESULTS.md) interprets the lift honestly (pass@1 ~11% → 100%
@@ -146,8 +155,21 @@ compute counted — the result is honest enough to trust.
 7. **Positioned** — one paragraph: who it's for, what it beats, why this not the obvious alternative.
 
 **Hardening items (Crucible-specific):**
-- [ ] **H1 — Execute the real-model variants; lead with them.** Run the M1/M2/M4/M6/M7 "Real-model variant" Tests on Ollama (**Qwen2.5-Math-1.5B-Instruct**) + a real open PRM (e.g. Qwen2.5-Math-PRM / Skywork) on **MATH-500** (graded; the beam-beats-best-of-N crossover only shows on the hard subset). *Accept:* `docs/RESULTS.md` and the README **lead with a real ≥3-seed MATH-500 accuracy-vs-compute curve with Wilson CIs** showing search lifting the 1.5B policy, frontier overlaid; the synthetic curves are demoted to "mechanism validation." _(Substantially met 2026-07-12: `docs/RESULTS.md §0` now **leads with a real GSM8K accuracy-vs-compute curve** (Ollama 1.5B + Skywork 1.5B PRM, Wilson CIs, frontier), synthetic demoted to mechanism validation, PRM beats majority. **Remaining polish:** the exact ≥3-seed **MATH-500** version, plus beam/mcts real cells.)_
-- [ ] **H2 — The "small-beats-big" headline.** Add a named bigger-model baseline (run pass@1 of e.g. a 7B/14B instruct on the same MATH-500 subset) and show **1.5B + compute-optimal search matches/beats it at the measured compute** (the Snell 2024 / "Can 1B Surpass 405B?" result). *Accept:* a one-line claim in RESULTS.md backed by both runs + the frontier table.
+- [x] **H1 — Execute the real-model variants; lead with them.** _(✓ 2026-07-14.)_ Ran the
+  real-model variants on Ollama `qwen2.5:1.5b-instruct` + the real **Skywork 1.5B PRM** on
+  **MATH-500, 3 seeds** (problems 0–39). `docs/RESULTS.md §0` and the README now **lead with
+  the real 3-seed MATH-500 accuracy-vs-compute curve** (Wilson CIs, frontier); synthetic
+  demoted to mechanism validation. Result (honest): pass@1 38.3% → oracle@8 70%; on identical
+  samples the PRM beats majority at every N (N=4: 53.3% vs 45.0%), though its ~2× compute
+  makes it ~a wash with majority at matched tokens. Captured to `tests/fixtures/math500-*`,
+  reproduced offline by `tests/test_cassette.py`. Delivered via the new `crucible bench` verb.
+- [ ] **H2 — The "small-beats-big" headline.** _(Measured 2026-07-14 — honest **negative** on
+  this stack.)_ Ran `qwen2.5:7b-instruct` pass@1 on the same 40 MATH-500 problems: **67.5% at
+  ~524 tok/problem**. The 1.5B + PRM search needs ~8k tokens (16×) to reach 55% and only the
+  *oracle cheat* matches the 7B — so **small does not beat big here** (RESULTS §0.2). The
+  positive claim awaits a *stronger* selector (the family-matched Qwen 7B PRM); the negative
+  is captured and reproducible (`tests/fixtures/math500-7b-pass1.json`). Box stays open until
+  the positive result is demonstrated.
 - [x] **H3 — Record real runs as fixtures.** _(✓ 2026-07-12.)_ Both the model *and* the PRM
   are cassetted: `RecordingPolicy`/`CassettePolicy` + `--record` (generation), and
   `crucible.bench` records traces + PRM scores + correctness to `tests/fixtures/`. The real
