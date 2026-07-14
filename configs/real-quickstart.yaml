@@ -1,23 +1,27 @@
-# First REAL-model run — small models, a small MATH-500 slice. Runs on CPU (slowly) or
-# any small GPU; confirms the Ollama policy + transformers-PRM path end-to-end before you
-# scale up to 7B. This is the gentle "does the real pipeline work?" check.
+# First REAL-model run — the validated 12 GB stack: a small frozen instruct policy via
+# Ollama + the Skywork 1.5B PRM via transformers (~3 GB VRAM). This is the exact model
+# pair behind the captured curves in docs/RESULTS.md §0, so a fresh clone reproduces the
+# artifact next to it. Confirms the Ollama policy + transformers-PRM path end-to-end.
 #
 # Prereqs:
 #   pip install -e ".[datasets,prm]"
-#   ollama serve            # (and: ollama pull qwen2.5-math-1.5b-instruct)
+#   ollama serve            # and: ollama pull qwen2.5:1.5b-instruct
+#   # Blackwell (RTX 50xx): pip install torch --index-url https://download.pytorch.org/whl/cu128
 # Run:
 #   crucible sweep configs/real-quickstart.yaml
 #   crucible report runs/sweep-<timestamp>          # re-print frontier + curve
 #
-# The PRM here is a small open process-reward model (family-ish match to the Qwen policy).
-# Heads-up: the real PRMVerifier tensor wiring is unrun in CI — confirm the per-step
-# scores look sane on the model card the first time (DESIGN §9).
+# For the headline best-of-N curve, prefer the cheaper capture path (samples once,
+# computes every N/selector offline, and leaves a replayable cassette). One line so it
+# pastes into PowerShell as-is:
+#   crucible bench record --dataset math500 --model qwen2.5:1.5b-instruct --prm Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B --max-n 8 --limit 25 --out runs/m500.json
+#   crucible bench curve runs/m500.json
 dataset: math500
 limit: 25
 seeds: [0]
 policy:
   backend: ollama
-  model: qwen2.5-math-1.5b-instruct
+  model: qwen2.5:1.5b-instruct
 prm: Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B
 
 grid:

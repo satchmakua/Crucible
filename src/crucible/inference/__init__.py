@@ -11,16 +11,32 @@ vLLM and a hosted OpenAI-compatible adapter slot in behind the same port later.
 
 from __future__ import annotations
 
-from crucible.inference.cassette import CassettePolicy, RecordingPolicy, load_cassette
+from crucible.inference.cassette import (
+    CassetteBundle,
+    CassettePolicy,
+    CassetteProcessVerifier,
+    RecordingPolicy,
+    RecordingProcessVerifier,
+    load_bundle,
+    load_cassette,
+    load_prm_cassette,
+    step_key,
+)
 from crucible.inference.mock import ScriptedPolicy
 from crucible.inference.ollama import OllamaPolicy
 from crucible.inference.synthetic import SyntheticPolicy
 
 __all__ = [
+    "CassetteBundle",
     "CassettePolicy",
+    "CassetteProcessVerifier",
     "OllamaPolicy",
     "RecordingPolicy",
+    "RecordingProcessVerifier",
     "ScriptedPolicy",
     "SyntheticPolicy",
+    "load_bundle",
     "load_cassette",
+    "load_prm_cassette",
+    "step_key",
 ]

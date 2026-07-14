@@ -66,6 +66,16 @@ def load_math500(limit: int | None = None) -> list[Problem]:
     return [math500_to_problem(row, i) for i, row in enumerate(rows)]
 
 
+# The beam-beats-best-of-N crossover is a hard-problem phenomenon (ROADMAP M4/M6);
+# this subset keeps the original dataset order so problem ids stay stable.
+MATH500_HARD_LEVELS = ("level-4", "level-5")
+
+
+def load_math500_hard(limit: int | None = None) -> list[Problem]:
+    hard = [p for p in load_math500(None) if p.difficulty in MATH500_HARD_LEVELS]
+    return hard[:limit] if limit is not None else hard
+
+
 def humaneval_to_problem(row: dict[str, Any], idx: int) -> Problem:
     # The HumanEval `test` defines check(candidate); we append the call so the test tuple
     # is self-contained (candidate code + this block must exit cleanly to pass).

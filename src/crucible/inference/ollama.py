@@ -11,6 +11,7 @@ short-lived client is opened per request.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 from collections.abc import Callable
@@ -38,6 +39,7 @@ class OllamaPolicy:
         timeout: float = 120.0,
         prompt_builder: Callable[[Problem], str] = build_cot_prompt,
         client: httpx.Client | None = None,
+        seed: int | None = None,
     ) -> None:
         self.model = model
         self.host = (host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/")
@@ -45,6 +47,20 @@ class OllamaPolicy:
         self._timeout = timeout
         self._prompt_builder = prompt_builder
         self._client = client
+        self._seed = seed
+
+    def _request_seed(self, *parts: object) -> int | None:
+        """A stable per-request Ollama seed derived from the run seed + call identity.
+
+        Every sample index (and every step prefix) gets its own seed, so best-of-N
+        stays diverse while a whole run is reproducible for a fixed run seed — which
+        is what makes "3 seeds" a real, re-runnable experiment rather than three
+        arbitrary reruns. None (no run seed) leaves Ollama unseeded.
+        """
+        if self._seed is None:
+            return None
+        key = ":".join(str(p) for p in (self._seed, *parts))
+        return int.from_bytes(hashlib.sha256(key.encode("utf-8")).digest()[:4], "big") & 0x7FFFFFFF
 
     def _post(self, payload: dict[str, object]) -> dict[str, object]:
         if self._client is not None:
@@ -56,12 +72,17 @@ class OllamaPolicy:
         data: dict[str, object] = resp.json()
         return data
 
-    def _generate(self, prompt: str, *, temperature: float, max_tokens: int) -> tuple[str, int]:
+    def _generate(
+        self, prompt: str, *, temperature: float, max_tokens: int, seed: int | None = None
+    ) -> tuple[str, int]:
+        options: dict[str, object] = {"temperature": temperature, "num_predict": max_tokens}
+        if seed is not None:
+            options["seed"] = seed
         payload: dict[str, object] = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": options,
         }
         data = self._post(payload)
         text = str(data.get("response", ""))
@@ -79,9 +100,14 @@ class OllamaPolicy:
     ) -> list[Trace]:
         prompt = self._prompt_builder(problem)
         traces: list[Trace] = []
-        for _ in range(n):
+        for i in range(n):
             t0 = time.perf_counter()
-            text, tokens = self._generate(prompt, temperature=temperature, max_tokens=max_tokens)
+            text, tokens = self._generate(
+                prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                seed=self._request_seed(problem.id, i),
+            )
             traces.append(self._trace(text, tokens, time.perf_counter() - t0))
         return traces
 
@@ -98,10 +124,21 @@ class OllamaPolicy:
         prefix_text = "\n\n".join(s.text for s in prefix)
         prompt = f"{base}\n\n{prefix_text}".strip()
         steps: list[Step] = []
-        for _ in range(n):
+        for i in range(n):
             text, tokens = self._generate(
-                prompt, temperature=temperature, max_tokens=min(max_tokens, self._max_step_tokens)
+                prompt,
+                temperature=temperature,
+                max_tokens=min(max_tokens, self._max_step_tokens),
+                seed=self._request_seed("step", problem.id, prefix_text, i),
             )
+            # Keep the first segment as the step (what beam/MCTS branch on), but charge
+            # the FULL generation's real eval_count to it: the whole continuation was
+            # paid on the GPU even though only the first segment is retained. Using
+            # segment()'s word count instead would land beam/MCTS on a deflated token
+            # axis vs the eval_count-based best-of-N cassette cells — a matched-compute
+            # violation (DESIGN §2). eval_count is the same real-tokenizer unit as
+            # sample_full, so search and best-of-N compare honestly.
             first = segment(text, max_step_tokens=self._max_step_tokens)
-            steps.append(first[0] if first else Step(text=text, token_count=tokens))
+            step_text = first[0].text if first else text
+            steps.append(Step(text=step_text, token_count=tokens))
         return steps

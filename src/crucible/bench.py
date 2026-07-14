@@ -6,12 +6,19 @@ the PRM, and record everything to a **cassette**. The curve at every N and for e
 selector (majority / oracle / prm) is then a pure computation over that cassette — so a
 real run is captured once and its lift curve regenerates **offline in CI** (the standing
 "run live once, commit a fixture" pattern, now covering the PRM side).
+
+The CLI front door is `crucible bench` (record / merge / curve): captures run in short
+offset chunks (GPU TDR caution), chunks merge into per-seed cassettes, and `curve` pools
+any number of cassettes (seeds) — optionally filtered by difficulty, restricted to the
+problems of live run dirs, and overlaid with those runs' beam/MCTS cells.
 """
 
 from __future__ import annotations
 
+import csv
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,9 +46,21 @@ class SampleRecord:
     traces: list[TraceRecord] = field(default_factory=list)
 
 
-def record_samples(config: RunConfig, max_n: int) -> list[SampleRecord]:  # pragma: no cover - GPU
-    """Generate `max_n` traces per problem once; score each with outcome + PRM."""
-    problems = load_dataset(config.dataset, limit=config.limit)
+def record_samples(
+    config: RunConfig,
+    max_n: int,
+    *,
+    offset: int = 0,
+    progress: Callable[[int, int, SampleRecord], None] | None = None,
+) -> list[SampleRecord]:
+    """Generate `max_n` traces per problem once; score each with outcome + PRM.
+
+    `offset` skips the first problems so a long capture can run in short chunks
+    (the dev GPU's documented TDR risk on long inference) and be merged after;
+    `config.limit` is the chunk size, not the absolute end index.
+    """
+    limit = None if config.limit is None else offset + config.limit
+    problems = load_dataset(config.dataset, limit=limit)[offset:]
     policy = build_policy(config)
     outcome = build_outcome_verifier(config)
     process = build_process_verifier(config)
@@ -67,7 +86,10 @@ def record_samples(config: RunConfig, max_n: int) -> list[SampleRecord]:  # prag
                     prm_score=prm_score,
                 )
             )
-        records.append(SampleRecord(problem.id, problem.answer, problem.difficulty, trs))
+        record = SampleRecord(problem.id, problem.answer, problem.difficulty, trs)
+        records.append(record)
+        if progress is not None:
+            progress(len(records), len(problems), record)
     return records
 
 
@@ -81,9 +103,9 @@ def save_samples(records: list[SampleRecord], path: str | Path, meta: dict[str, 
     return out
 
 
-def load_samples(path: str | Path) -> list[SampleRecord]:
+def load_samples_with_meta(path: str | Path) -> tuple[list[SampleRecord], dict[str, Any]]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return [
+    records = [
         SampleRecord(
             problem_id=r["problem_id"],
             gold=r.get("gold"),
@@ -92,6 +114,39 @@ def load_samples(path: str | Path) -> list[SampleRecord]:
         )
         for r in data["records"]
     ]
+    meta = data.get("meta") or {}
+    return records, dict(meta)
+
+
+def load_samples(path: str | Path) -> list[SampleRecord]:
+    records, _meta = load_samples_with_meta(path)
+    return records
+
+
+def filter_records(
+    records: list[SampleRecord],
+    *,
+    difficulties: set[str] | None = None,
+    problem_ids: set[str] | None = None,
+) -> list[SampleRecord]:
+    """Restrict a cassette to a difficulty band and/or an explicit problem set."""
+    out = records
+    if difficulties is not None:
+        out = [r for r in out if r.difficulty in difficulties]
+    if problem_ids is not None:
+        out = [r for r in out if r.problem_id in problem_ids]
+    return out
+
+
+def default_n_values(max_n: int) -> list[int]:
+    """Powers of two up to `max_n` (inclusive) — the standard best-of-N ladder."""
+    values = []
+    n = 1
+    while n < max_n:
+        values.append(n)
+        n *= 2
+    values.append(max_n)
+    return values
 
 
 def _select(selector: str, traces: list[TraceRecord]) -> TraceRecord:
@@ -158,3 +213,61 @@ def _cell(
         "accuracy_ci_high": high,
         "mean_tokens": tokens,
     }
+
+
+def _read_results(run_dir: Path) -> list[dict[str, str]]:
+    with (run_dir / "results.csv").open(encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def cell_from_run(
+    run_dir: str | Path,
+    *,
+    keep_ids: set[str] | None = None,
+    difficulties: set[str] | None = None,
+) -> dict[str, Any]:
+    """A curve cell from a live run record (a beam/MCTS point to overlay on the curve).
+
+    Recomputed from the per-problem ``results.csv`` (not summary.json) so the overlay
+    can be restricted to exactly the same problem-id / difficulty subset the cassette
+    cells use — otherwise a filtered best-of-N curve would be compared against an
+    unfiltered beam point (a matched comparison that silently isn't). `mean_tokens` is
+    total tokens (policy + verifier) over the kept problems, on the same honest axis as
+    the cassette cells; the Wilson CI is recomputed on the subset.
+    """
+    run_dir = Path(run_dir)
+    config = RunConfig.from_dict(json.loads((run_dir / "config.json").read_text(encoding="utf-8")))
+    rows = _read_results(run_dir)
+    if keep_ids is not None:
+        rows = [r for r in rows if r["problem_id"] in keep_ids]
+    if difficulties is not None:
+        rows = [r for r in rows if r.get("difficulty") in difficulties]
+    if config.method == "beam":
+        knob = config.beam_width
+    elif config.method == "mcts":
+        knob = config.budget_tokens or 0
+    else:
+        knob = config.n
+    total = len(rows)
+    correct = sum(1 for r in rows if r["correct"] in ("1", "True", "true"))
+    tokens = sum(int(r["total_tokens"]) for r in rows)
+    low, high = wilson_interval(correct, total)
+    cell = _cell(config.method, config.selection, knob, correct, total, low, high, tokens / max(total, 1))
+    cell["source"] = f"run:{run_dir.name}"
+    return cell
+
+
+def run_problem_ids(run_dir: str | Path) -> set[str]:
+    """The problem ids a run touched (from results.csv) — for matched-problem curves."""
+    return {row["problem_id"] for row in _read_results(Path(run_dir))}
+
+
+def records_have_consistent_prm(records: list[SampleRecord]) -> tuple[bool, bool]:
+    """(any_record_scored, all_records_scored) — a record is scored iff every trace is.
+
+    Pooling scored and unscored records silently blends pass@1 into the 'prm' curve
+    line (an unscored trace ranks at the sentinel, so selection falls back to the first
+    sample) while still charging PRM compute — so the caller errors on a mixed pool.
+    """
+    flags = [bool(r.traces) and all(t.prm_score is not None for t in r.traces) for r in records]
+    return any(flags), all(flags)

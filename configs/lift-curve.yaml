@@ -3,27 +3,31 @@
 # artifact DESIGN §1 is really after — the synthetic configs (results.yaml) only prove the
 # machinery; this proves the lift on a real model.
 #
-# Needs a single NVIDIA GPU (~16-24 GB) to be comfortable — see "suitable machine" in the
-# README. On CPU-only or a smaller GPU, start from configs/real-quickstart.yaml instead.
+# Model pair = the validated 12 GB stack (the same one behind docs/RESULTS.md §0):
+# policy qwen2.5:1.5b-instruct on Ollama, PRM Skywork 1.5B on transformers (~3 GB VRAM).
+# On a 24 GB+ GPU, a 7B policy (qwen2.5:7b-instruct) with Qwen/Qwen2.5-Math-PRM-7B is the
+# stronger family-matched variant — but as written this runs on the dev laptop.
 #
 # Prereqs:
 #   pip install -e ".[datasets,prm]"
-#   ollama serve            # (and: ollama pull qwen2.5-math-7b-instruct)
-# Run:
+#   ollama serve            # and: ollama pull qwen2.5:1.5b-instruct
+# Run (sweep re-generates per cell — expensive; fine for beam/mcts, wasteful for best_of_n):
 #   crucible sweep configs/lift-curve.yaml
-#   crucible report runs/sweep-<timestamp>          # frontier table + re-rendered curve
-#   crucible compare --policy ollama --model qwen2.5-math-7b-instruct \
-#       --dataset math500 --prm Qwen/Qwen2.5-Math-PRM-7B --n 16   # the selection gap
+# Cheaper equivalent for the best-of-N cells (sample once, every N/selector offline,
+# replayable cassette — the path the captured RESULTS §0 curve used). One line so it
+# pastes into PowerShell (the project's shell) as-is; repeat with --seed 1, 2:
+#   crucible bench record --dataset math500 --model qwen2.5:1.5b-instruct --prm Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B --max-n 8 --limit 100 --seed 0 --out runs/math500-seed0.json
+#   crucible bench curve runs/math500-seed0.json runs/math500-seed1.json runs/math500-seed2.json
 #
-# Family-matched baseline: a Qwen policy with a Qwen PRM (DESIGN §9). Keep the policy a
-# NON-reasoning instruct model so the external search lift is visible.
+# Family-matched baseline: a Qwen policy with a Qwen-based PRM (DESIGN §9). Keep the
+# policy a NON-reasoning instruct model so the external search lift is visible.
 dataset: math500
 limit: 100
 seeds: [0, 1, 2]
 policy:
   backend: ollama
-  model: qwen2.5-math-7b-instruct
-prm: Qwen/Qwen2.5-Math-PRM-7B
+  model: qwen2.5:1.5b-instruct
+prm: Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B
 
 grid:
   - method: pass1

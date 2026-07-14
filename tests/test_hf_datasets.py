@@ -40,3 +40,21 @@ def test_math500_to_problem() -> None:
     assert p.prompt == "Find x."
     assert p.answer == "\\frac{1}{2}"
     assert p.difficulty == "level-5"
+
+
+def test_math500_hard_keeps_levels_4_and_5_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    from crucible import data
+    from crucible.data import hf
+    from crucible.domain.types import Problem
+
+    fake = [
+        Problem(id=f"math500-{i}", prompt="p", answer="1", difficulty=f"level-{lvl}")
+        for i, lvl in enumerate([1, 4, 5, 2, 5])
+    ]
+    monkeypatch.setattr(hf, "load_math500", lambda limit=None: fake if limit is None else fake[:limit])
+
+    hard = hf.load_math500_hard(None)
+    assert [p.id for p in hard] == ["math500-1", "math500-2", "math500-4"]
+    assert hf.load_math500_hard(2) == hard[:2]
+    # And it is registered as a dataset (the beam/MCTS real-cell target).
+    assert data.load_dataset("math500-hard", limit=2) == hard[:2]

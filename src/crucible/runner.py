@@ -18,6 +18,7 @@ from crucible.domain.types import Compute, Result
 from crucible.inference import (
     OllamaPolicy,
     RecordingPolicy,
+    RecordingProcessVerifier,
     ScriptedPolicy,
     SyntheticPolicy,
 )
@@ -76,6 +77,7 @@ def _build_backend(config: RunConfig) -> PolicyModel:
             accuracy=config.synthetic_accuracy,
             seed=config.seed,
             max_step_tokens=config.max_step_tokens,
+            depth=config.step_depth,
         )
     if backend == "stepwise":
         return StepwisePolicy(
@@ -87,6 +89,7 @@ def _build_backend(config: RunConfig) -> PolicyModel:
             config.policy.model,
             max_step_tokens=config.max_step_tokens,
             prompt_builder=prompt_builder,
+            seed=config.seed,
         )
     if backend == "hosted":
         raise NotImplementedError(
@@ -118,14 +121,23 @@ def build_outcome_verifier(config: RunConfig) -> OutcomeVerifier:
 
 
 def build_process_verifier(config: RunConfig) -> ProcessVerifier | None:
-    """The PRM, if requested. `--prm mock` is the seeded simulator; else a real PRM."""
+    """The PRM, if requested. `--prm mock` is the seeded simulator; else a real PRM.
+
+    With `record_prm` set, the verifier is wrapped so every score_steps call lands in
+    a cassette (the PRM half of the H3 record/replay pattern).
+    """
+    process: ProcessVerifier | None
     if not config.prm:
         return None
     if config.prm == "mock":
-        return MockProcessVerifier(accuracy=config.prm_accuracy, seed=config.seed)
-    if config.prm == "step":
-        return StepRewardPRM(accuracy=config.step_prm_accuracy, seed=config.seed)
-    return PRMVerifier(config.prm)
+        process = MockProcessVerifier(accuracy=config.prm_accuracy, seed=config.seed)
+    elif config.prm == "step":
+        process = StepRewardPRM(accuracy=config.step_prm_accuracy, seed=config.seed)
+    else:
+        process = PRMVerifier(config.prm)
+    if config.record_prm:
+        return RecordingProcessVerifier(process, config.record_prm)
+    return process
 
 
 def run(config: RunConfig) -> RunSummary:
@@ -164,6 +176,8 @@ def run(config: RunConfig) -> RunSummary:
         )
     if isinstance(policy, RecordingPolicy):
         policy.save()
+    if isinstance(process, RecordingProcessVerifier):
+        process.save()
     return summary
 
 
@@ -175,6 +189,12 @@ def run_comparison(config: RunConfig) -> dict[str, RunSummary]:
     not an artifact of independent sampling. Each selector's results carry the shared
     generation compute plus that selector's own selection cost.
     """
+    if config.record or config.record_prm:
+        # This path never calls .save(), so a cassette would be paid for and dropped.
+        raise ValueError(
+            "record/record_prm aren't supported by `compare` — capture with "
+            "`crucible run --record` / `crucible bench record` instead."
+        )
     problems = load_dataset(config.dataset, limit=config.limit)
     policy = build_policy(config)
     outcome = build_outcome_verifier(config)

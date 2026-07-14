@@ -104,6 +104,14 @@ def run_sweep(config_path: str | Path) -> SweepResult:
     if not grid:
         raise ValueError("sweep config needs a non-empty 'grid:' list")
     base = {str(k): v for k, v in data.items() if k not in ("grid", "seeds")}
+    if base.get("record") or base.get("record_prm"):
+        # Every cell x seed would save to the same cassette path, so only the last
+        # run's capture would survive. Record single runs (`crucible run --record`) or
+        # use `crucible bench record`, not a sweep.
+        raise ValueError(
+            "record/record_prm can't be set on a sweep — a shared cassette path is "
+            "overwritten by every cell. Use `crucible run --record` or `crucible bench`."
+        )
     seeds = list(data.get("seeds") or [base.get("seed", 0)])
     output_dir = str(base.get("output_dir", "runs"))
     configs = expand_grid(base, list(grid))

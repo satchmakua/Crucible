@@ -58,8 +58,10 @@ class RunConfig:
     # Code track (M5). Executing model-generated code is OFF unless explicitly enabled.
     allow_code_execution: bool = False
     code_timeout: float = 10.0  # hard wall-clock cap per candidate, seconds
-    # Cassettes (H3): record a real run's generations to this path for offline CI replay.
+    # Cassettes (H3): record a real run's generations (and PRM scores) to these paths
+    # for offline CI replay. `record` captures the policy side; `record_prm` the PRM.
     record: str | None = None
+    record_prm: str | None = None
     output_dir: str = "runs"
 
     def to_dict(self) -> dict[str, Any]:

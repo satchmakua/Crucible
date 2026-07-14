@@ -15,6 +15,7 @@ from functools import cache
 
 from crucible.domain.types import Compute, Problem, Step, Trace
 from crucible.segment import approx_tokens, segment
+from crucible.synthetic_stepwise import BAD_MARKER, GOOD_MARKER
 from crucible.verify.math_outcome import math_equal
 
 
@@ -50,10 +51,18 @@ class SyntheticPolicy:
 
     name = "synthetic"
 
-    def __init__(self, *, accuracy: float = 0.5, seed: int = 0, max_step_tokens: int = 512) -> None:
+    def __init__(
+        self,
+        *,
+        accuracy: float = 0.5,
+        seed: int = 0,
+        max_step_tokens: int = 512,
+        depth: int = 4,
+    ) -> None:
         self.accuracy = accuracy
         self.seed = seed
         self._max_step_tokens = max_step_tokens
+        self._depth = max(1, depth)
 
     def _trace(self, text: str) -> Trace:
         steps = segment(text, max_step_tokens=self._max_step_tokens)
@@ -88,6 +97,32 @@ class SyntheticPolicy:
         temperature: float,
         max_tokens: int,
     ) -> list[Step]:
-        # Step-wise sampling isn't meaningful for this simulator; beam/MCTS (M4+) use
-        # real backends. Return empty steps so the contract is satisfied.
-        return [Step(text="", token_count=0) for _ in range(n)]
+        """Stepwise sampling with the stepwise task's GOOD/BAD-marker convention.
+
+        A `depth`-step chain where each step is good with probability
+        ``accuracy ** (1/depth)`` — so a full sampled chain is correct with
+        probability ≈ `accuracy`, consistent with `sample_full`. The final step emits
+        the gold answer iff the whole chain is good. Markers make the steps scorable
+        by `StepRewardPRM` (`--prm step`), so beam/MCTS can run on this backend too.
+        Sampling is stateless: seeded by (run seed, problem, prefix, sample index).
+        """
+        idx = len(prefix)
+        final = idx + 1 >= self._depth
+        good_rate = self.accuracy ** (1.0 / self._depth)
+        prefix_all_good = all(GOOD_MARKER in s.text for s in prefix)
+        gold = problem.answer
+        distractor = _distractor(gold)
+        prefix_key = "\x1f".join(s.text for s in prefix)
+        steps: list[Step] = []
+        for i in range(n):
+            rng = random.Random(f"{self.seed}:{problem.id}:{idx}:{prefix_key}:{i}")
+            good = rng.random() < good_rate
+            marker = GOOD_MARKER if good else BAD_MARKER
+            quality = "sound" if good else "flawed"
+            text = f"Step {idx + 1}: a {quality} reasoning step. {marker}"
+            if final:
+                all_good = prefix_all_good and good and gold is not None
+                ans = gold if all_good else distractor
+                text += f"\n\nFinal answer: \\boxed{{{ans}}}"
+            steps.append(Step(text=text, token_count=approx_tokens(text)))
+        return steps

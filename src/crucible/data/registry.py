@@ -5,7 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from crucible.data.code_sample import CODE_SAMPLE_PROBLEMS, CODE_SAMPLE_SCRIPTS
-from crucible.data.hf import load_gsm8k, load_humaneval, load_math500, load_mbpp
+from crucible.data.hf import (
+    load_gsm8k,
+    load_humaneval,
+    load_math500,
+    load_math500_hard,
+    load_mbpp,
+)
 from crucible.data.sample import SAMPLE_PROBLEMS, SAMPLE_SCRIPTS
 from crucible.domain.types import Problem
 
@@ -19,6 +25,7 @@ _BUNDLED: dict[str, tuple[Problem, ...]] = {
 _LOADERS: dict[str, Callable[[int | None], list[Problem]]] = {
     "gsm8k": load_gsm8k,
     "math500": load_math500,
+    "math500-hard": load_math500_hard,  # levels 4-5 — where beam/MCTS earn their keep
     "humaneval": load_humaneval,
     "mbpp": load_mbpp,
 }

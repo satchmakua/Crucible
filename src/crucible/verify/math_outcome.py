@@ -24,15 +24,35 @@ for _name in ("math_verify", "math_verify.utils", "math_verify.grader", "math_ve
     logging.getLogger(_name).setLevel(logging.ERROR)
 
 
+def _candidate_forms(s: str) -> list[str]:
+    """The delimited form first, then the raw string.
+
+    math-verify's LaTeX extractor is built for *delimited* math. MATH-500 golds and
+    extracted ``\\boxed`` contents are bare, and bare compound answers parse wrong:
+    ``\\left( 3, \\frac{\\pi}{2} \\right)`` extracts as just ``3`` and the matching
+    tuple ``(3, \\frac{\\pi}{2})`` as nothing — a systematic false negative on
+    tuple/interval/coordinate answers (and a lurking ``3 == 3`` false positive).
+    ``$``-wrapping restores full-fidelity parses.
+    """
+    if "$" in s:
+        return [s]
+    return [f"${s}$", s]
+
+
 def _math_verify_equal(pred: str, gold: str) -> bool:
+    import itertools
+
     from math_verify import ExprExtractionConfig, LatexExtractionConfig, parse, verify
 
     cfg = [LatexExtractionConfig(), ExprExtractionConfig()]
-    g = parse(gold, extraction_config=cfg, parsing_timeout=None)
-    p = parse(pred, extraction_config=cfg, parsing_timeout=None)
-    if not g or not p:
-        raise ValueError("empty parse")
-    return bool(verify(g, p, timeout_seconds=None))
+    # The first (gold form, pred form) pair where both sides parse is definitive —
+    # fidelity order, so a parsed-as-tuple never loses to a parsed-as-first-number.
+    for g_form, p_form in itertools.product(_candidate_forms(gold), _candidate_forms(pred)):
+        g = parse(g_form, extraction_config=cfg, parsing_timeout=None)
+        p = parse(p_form, extraction_config=cfg, parsing_timeout=None)
+        if g and p:
+            return bool(verify(g, p, timeout_seconds=None))
+    raise ValueError("empty parse")
 
 
 def _fallback_equal(pred: str, gold: str) -> bool:

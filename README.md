@@ -45,9 +45,9 @@ and pull a small instruct model, then run real pass@1 on GSM8K:
 
 ```powershell
 pip install -e ".[datasets]"
-ollama pull qwen2.5-math-1.5b-instruct      # or any small instruct model
+ollama pull qwen2.5:1.5b-instruct           # the captured runs' policy model
 python -m crucible run --method pass1 --dataset gsm8k --policy ollama `
-    --model qwen2.5-math-1.5b-instruct --limit 20
+    --model qwen2.5:1.5b-instruct --limit 20
 ```
 
 **The lift curve (M2):** produce the headline accuracy-vs-compute curve offline (no
