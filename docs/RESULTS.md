@@ -5,10 +5,10 @@
 > into measured accuracy, *with the verifier's compute counted*, and showing **why**
 > (which method is compute-optimal at which budget, and where the PRM's selection gap is).
 
-**§0 is the real artifact — a real model, real PRM, real data, 3 seeds.** §1–§6 are the
+**§0 is the real artifact — a real model, real PRM, real data, 3 seeds.** §1–§5 are the
 *cold, simulator* validation (a synthetic policy + a mock PRM) that runs with no GPU on
 every commit; read them as "the harness measures the right things correctly," not "model X
-scores Y." The real curve is §0.
+scores Y." §6 lists the threats to validity. The real curve is §0.
 
 ## 0. The real lift curve — accuracy vs test-time compute on MATH-500 (3 seeds)
 
@@ -127,8 +127,9 @@ cell, Wilson CIs). The plot is `runs/sweep-*/curve.png`:
 | best_of_n (prm) | N=32 | 100.0% [82%, 100%] | 2,432 |
 | beam | width=2 | 94.4% [74%, 99%] | 1,112 |
 | beam | width=4 | 100.0% [82%, 100%] | 2,168 |
-| mcts | budget=4000 | 77.8% [55%, 91%] | 4,075 |
-| mcts | budget=6000 | 100.0% [82%, 100%] | 6,080 |
+| mcts | budget=2000 | 55.6% [34%, 75%] | 2,073 |
+| mcts | budget=4000 | 88.9% [67%, 97%] | 4,069 |
+| mcts | budget=6000 | 100.0% [82%, 100%] | 6,077 |
 
 **The lift is real and large:** single-shot pass@1 is ~11%; with enough verifier-guided
 search every method reaches 100%. Crucially the x-axis is **total generated tokens,
@@ -210,15 +211,36 @@ is unchanged; only the verifier differs (DESIGN §6.2).
 
 ## Reproducing
 
+**The real results (§0) — no GPU, no network, no model.** Every number above replays from
+the committed cassettes:
+
 ```bash
 pip install -e ".[dev]"
-crucible sweep configs/results.yaml        # the cold, multi-seed ladder + frontier
+make demo                                            # or the two lines below:
+crucible bench curve tests/fixtures/math500-bestofn-seed*.json   # the §0 headline curve
+pytest tests/test_cassette.py                        # asserts every §0/§0.1/§0.2 number
+```
+
+**The cold simulator validation (§1–§5)** — mechanism checks, also no GPU:
+
+```bash
+crucible sweep configs/results.yaml        # the multi-seed ladder + frontier
 crucible compare                           # the PRM selection gap (cold)
 crucible run --dataset code-sample --policy mock --allow-code-exec   # code track (cold)
 ```
 
-**For real numbers**, point the same sweep at a real backend — set
-`policy: {backend: ollama, model: qwen2.5-math-1.5b-instruct}` and a real `prm:` (a Qwen
-PRM via the `prm` extra, on a GPU), and use `dataset: math500` (which carries graded
-difficulty, so `crucible`'s per-difficulty analysis becomes meaningful). The analysis,
-plots, CIs, and compute accounting are identical — only the adapters change.
+**Capturing a *new* real run** (needs `pip install -e ".[datasets,prm]"`, a running Ollama,
+and a GPU). This is the exact stack behind §0 — policy `qwen2.5:1.5b-instruct`, the Skywork
+1.5B PRM; see [`configs/real-quickstart.yaml`](../configs/real-quickstart.yaml) for the
+sweep form, or capture the curve directly (chunk with `--offset`/`--limit`; a crash saves
+progress and prints the resume offset):
+
+```bash
+crucible bench record --dataset math500 --model qwen2.5:1.5b-instruct \
+  --prm Skywork/Skywork-o1-Open-PRM-Qwen-2.5-1.5B --max-n 8 --limit 40 --seed 0 \
+  --out runs/m500-s0.json          # repeat with --seed 1, 2
+crucible bench curve runs/m500-s0.json runs/m500-s1.json runs/m500-s2.json
+```
+
+The analysis, plots, CIs, and compute accounting are identical across all three paths —
+only the adapters change.

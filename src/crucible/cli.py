@@ -1,10 +1,16 @@
 """The `crucible` command-line front door (Typer over a YAML/flag config).
 
 It's a harness, not a server: `run` executes one experiment and writes a record;
-`report` prints a past run's metrics; `sweep` (the grid → headline curve) arrives in
-M2. Run the offline M0 demo with:
+`report` prints a past run's metrics; `sweep` runs a grid; `compare` exposes the PRM's
+selection gap; `bench` captures a real lift curve once and regenerates it offline.
+
+Run the offline demo (no GPU, no network):
 
     crucible run --method pass1 --dataset sample --policy mock
+
+Reproduce the real headline curve from the committed cassettes:
+
+    crucible bench curve tests/fixtures/math500-bestofn-seed*.json
 """
 
 from __future__ import annotations
@@ -51,18 +57,31 @@ console = Console()
 
 @app.command()
 def run(
-    method: Annotated[str, typer.Option(help="search method (pass1; more in later milestones)")] = "pass1",
-    dataset: Annotated[str, typer.Option(help="dataset (sample bundled; gsm8k/math500 in M1)")] = "sample",
-    policy: Annotated[str, typer.Option(help="inference backend: mock | ollama | hosted")] = "mock",
+    method: Annotated[str, typer.Option(help="search method: pass1 | best_of_n | beam | mcts")] = "pass1",
+    dataset: Annotated[
+        str,
+        typer.Option(help="dataset: sample | gsm8k | math500 | math500-hard | code-sample | humaneval | mbpp"),
+    ] = "sample",
+    policy: Annotated[
+        str, typer.Option(help="inference backend: mock | synthetic | stepwise | ollama")
+    ] = "mock",
     model: Annotated[str, typer.Option(help="policy model id for the chosen backend")] = "scripted",
     n: Annotated[int, typer.Option(help="samples per problem (best_of_n)")] = 1,
     selection: Annotated[
-        str, typer.Option(help="best_of_n selector: majority | oracle")
+        str, typer.Option(help="best_of_n selector: majority | oracle | prm")
     ] = "majority",
     temperature: Annotated[float, typer.Option(help="sampling temperature")] = 0.7,
     max_tokens: Annotated[int, typer.Option(help="max tokens per generation")] = 1024,
     limit: Annotated[int | None, typer.Option(help="cap the number of problems")] = None,
     seed: Annotated[int, typer.Option(help="random seed")] = 0,
+    beam_width: Annotated[int, typer.Option(min=1, help="beam: partial traces kept per round (k)")] = 4,
+    beam_expansions: Annotated[
+        int, typer.Option(min=1, help="beam/mcts: continuations sampled per partial (m)")
+    ] = 4,
+    max_steps: Annotated[int, typer.Option(min=1, help="beam/mcts: hard cap on search depth")] = 8,
+    budget_tokens: Annotated[
+        int | None, typer.Option(help="mcts: total token budget per problem (policy + verifier)")
+    ] = None,
     synthetic_accuracy: Annotated[
         float, typer.Option(help="per-problem correctness for --policy synthetic")
     ] = 0.5,
@@ -96,6 +115,10 @@ def run(
             selection=selection,
             seed=seed,
             limit=limit,
+            beam_width=beam_width,
+            beam_expansions=beam_expansions,
+            max_steps=max_steps,
+            budget_tokens=budget_tokens,
             synthetic_accuracy=synthetic_accuracy,
             prm=prm,
             prm_accuracy=prm_accuracy,

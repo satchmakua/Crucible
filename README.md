@@ -5,26 +5,48 @@
 > model), and **search** — best-of-N → beam → MCTS over reasoning steps — to turn
 > test-time compute into measurable accuracy on math and code.
 
-Most people only *consume* reasoning models; Crucible builds the machinery underneath
-and **measures the lift** — accuracy as a function of test-time compute over a small
-open policy model. The full design and rationale live in [DESIGN.md](DESIGN.md).
-
-**Status:** **The roadmap is built (M0–M7) and the real lift curves are captured — 3-seed
-MATH-500, honest numbers.** On real **MATH-500** (3 seeds) with a frozen 1.5B policy (Ollama)
-+ a real 1.5B PRM (Skywork, GPU), search lifts **pass@1 38% → 70% (oracle) at N=8**, and on
-identical samples the **learned PRM beats self-consistency majority at every N** (N=4: 53% vs
-45%) — with the honest caveats counted: the PRM's ~2× compute makes it roughly a wash with
-majority at matched *tokens*, and a **7B baseline (67.5% pass@1) is more compute-efficient
-than 1.5B + search** (small-beats-big does *not* hold on this stack). Real **beam** and
-**MCTS** cells run on the hardest subset and are honestly the most expensive / not winning
-here. The full story: [docs/RESULTS.md §0](docs/RESULTS.md) — every number reproduces offline
-from committed cassettes. Behind one policy/verifier/search interface: **best-of-N** (M2),
-**PRM-weighted selection + the selection gap** (M3), **PRM-guided beam/DVTS** (M4), a
-sandboxed **code track** (M5), **MCTS over reasoning steps** (M6), the **compute-optimal
-report** (M7), plus review-driven hardening (H1 MATH-500 curve ✓, H3 cassettes ✓, H4
-adversarial fixes ✓). See [ROADMAP.md](ROADMAP.md) and [PROGRESS.md](PROGRESS.md).
+**Who it's for, and why this and not the obvious thing.** Crucible is for engineers and
+researchers who need to *know* — not assume — what test-time search actually buys on a model
+they control. The obvious alternative is to call a reasoning model and trust its benchmark
+table, or to hand-roll a best-of-N script; the first tells you nothing about *your* policy,
+and the second almost always reports a lift it didn't pay for. Crucible is the instrument
+instead of the anecdote: it plots accuracy against **total tokens with the verifier's own
+compute counted**, reports the **outcome** verifier on the chosen trace (never a PRM score),
+puts Wilson CIs and a **named bigger-model baseline** next to every claim — and publishes the
+results when search *loses*. It does lose here, twice; that's the point. Design rationale:
+[DESIGN.md](DESIGN.md).
 
 ![Real MATH-500 accuracy-vs-compute curve](docs/math500-lift-curve.png)
+
+**The headline — real model, real PRM, real data.** 3-seed MATH-500, frozen
+`qwen2.5:1.5b-instruct` (Ollama) + a real **Skywork 1.5B PRM** (GPU): search lifts **pass@1
+38.3% → 70% (oracle) at N=8**, and on *identical samples* the learned PRM beats
+self-consistency majority at every N (N=4: **53.3% vs 45.0%**). The caveats, all measured, none
+buried:
+
+- the PRM's ~2× compute makes it **≈ a wash with majority at matched tokens**;
+- a **7B baseline (67.5% pass@1 @ 524 tok) is more compute-efficient than 1.5B + search** —
+  **small-beats-big fails** on this stack;
+- real **beam (0/8)** and **MCTS (1/8)** on the hardest problems are the *most expensive*
+  methods and **don't win**.
+
+Full write-up, every number and caveat: **[docs/RESULTS.md §0](docs/RESULTS.md)**.
+
+**Reproduce the headline in one command — no GPU, no network, no model.** It replays the
+recorded real runs from committed cassettes:
+
+```powershell
+make demo   # no make on Windows? use the line below:
+python -m crucible bench curve tests/fixtures/math500-bestofn-seed*.json
+```
+
+**Status:** M0–M7 built; the real curves are captured and replay in CI. Behind one
+policy/verifier/search interface: **best-of-N** (M2), **PRM selection + the selection gap**
+(M3), **PRM-guided beam/DVTS** (M4), a sandboxed **code track** (M5), **MCTS** (M6), the
+**compute-optimal report** (M7), plus hardening (H1 ✓, H3 ✓, H4 ✓; **H2 measured — an honest
+negative**). Open: a favorable real result for beam/MCTS (M4/M6) and small-beats-big (H2) both
+need a stronger PRM / a reasoning policy; M5's real HumanEval run is still unrun. See
+[ROADMAP.md](ROADMAP.md) · [PROGRESS.md](PROGRESS.md).
 
 ---
 
@@ -122,7 +144,33 @@ python -m crucible run --dataset code-sample --policy mock --allow-code-exec   #
 | `crucible run --dataset code-sample --allow-code-exec` | Code track: sandboxed execution (M5) |
 | `crucible run … --record <path>` | Record a live run to a cassette that replays offline in CI (H3) |
 | `crucible version` | Print the version |
+| `make demo` · `make check` | The offline real-results demo · lint + typecheck + test |
 | `ruff check .` · `mypy src` · `pytest` | Lint · typecheck · tests |
+
+---
+
+## What Crucible can't do
+
+An honest instrument publishes its limits, not just its wins:
+
+- **It won't make a weak policy strong.** On MATH-500's hardest problems the 1.5B policy's
+  pass@1 is **0%**; search lifts that to 12–17%, not to competence. A bigger model
+  (7B pass@1 **67.5%**) beats 1.5B + search at a fraction of the compute — **small-beats-big
+  does not hold here** (it needs a stronger PRM than the 1.5B Skywork).
+- **Stepwise search (beam/MCTS) doesn't help a non-reasoning instruct policy.** Asked to
+  *continue* a partial trace, `qwen2.5:1.5b-instruct` **restarts** instead — so beam scores
+  0/8 at ~37k tokens/problem. Beam/DVTS is a reasoning-policy phenomenon; this stack can't
+  show its win.
+- **No training.** Policies and PRMs are frozen — no fine-tuning, RL, or self-improvement
+  (an explicit v1 non-goal).
+- **The code sandbox is a guardrail, not a jail** (subprocess + timeout + no network + scratch
+  dir; opt-in). Use Docker/WSL2 for genuinely untrusted code. See
+  [ADR-0003](docs/adr/0003-code-execution-sandbox.md).
+- **Single node, one GPU.** No multi-GPU or distributed orchestration.
+- **Statistics are modest.** Curves pool 40 problems × 3 seeds; the seeds share problems, so
+  CIs are mildly optimistic and close margins are suggestive, not decisive. The compute axis
+  counts **tokens, not FLOPs** (which flatters small models). Full list:
+  [RESULTS §6](docs/RESULTS.md).
 
 `crucible` and `python -m crucible` are equivalent. Optional extras install per
 milestone: `".[datasets]"` (M1), `".[prm]"` (M3), `".[vllm]"`.
@@ -147,16 +195,18 @@ When reporting an issue or a run:
 | [docs/RESULTS.md](docs/RESULTS.md) | The results report — the lift curve, interpreted honestly. |
 | [ROADMAP.md](ROADMAP.md) | The milestone checklist (the plan + what's done). |
 | [PROGRESS.md](PROGRESS.md) | Build log: what shipped each milestone and why. |
-| [CLAUDE.md](CLAUDE.md) | Standing build instructions and conventions. |
 | [`docs/`](docs/) | Long-form docs and architecture decisions (ADRs). |
 
 ## Tech stack
 
 Python 3.11+ · **Typer** CLI over **YAML** config · ports-and-adapters core ·
-**math-verify** + SymPy (math equivalence) · **httpx** (Ollama/hosted backends) ·
-pandas + matplotlib (reporting) · pytest · ruff · mypy. Inference backends are
-swappable adapters (mock now; Ollama / vLLM / hosted); PRM scoring via transformers
-and datasets via HuggingFace arrive behind extras as the milestones need them.
+**math-verify** + SymPy (math equivalence) · **httpx** (Ollama backend) ·
+pandas + matplotlib (reporting) · pytest · ruff · mypy(strict). Inference backends are
+swappable adapters behind one port — `mock`/`synthetic`/`stepwise` (offline, drive the
+tests) and **`ollama`** (the real backend used for every captured result); a vLLM/hosted
+adapter slots in the same way. PRM scoring (**transformers** + torch) and the HuggingFace
+dataset loaders live behind the `prm` and `datasets` extras, so the base install stays
+light and the whole test suite runs with no GPU.
 
 ## License
 

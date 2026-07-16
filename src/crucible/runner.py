@@ -96,7 +96,10 @@ def _build_backend(config: RunConfig) -> PolicyModel:
             "the hosted OpenAI-compatible backend lands in a later milestone; "
             "use --policy mock (offline) or --policy ollama."
         )
-    raise ValueError(f"unknown policy backend '{backend}' (mock | ollama | hosted).")
+    raise ValueError(
+        f"unknown policy backend '{backend}' "
+        "(mock | synthetic | stepwise | ollama; 'hosted' is not implemented yet)."
+    )
 
 
 def build_policy(config: RunConfig) -> PolicyModel:

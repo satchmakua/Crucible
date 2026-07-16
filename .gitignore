@@ -48,3 +48,9 @@ runs/
 .hf_cache/
 *.ckpt
 *.safetensors
+
+# Agent/session working files. These are kept out of the repo on purpose: CLAUDE.md is a
+# local standing brief, not a shipped doc. Listed here (not only in a machine-local global
+# gitignore) so a clone on any other machine ignores them too.
+.claude/
+CLAUDE.md

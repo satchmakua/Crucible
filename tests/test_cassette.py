@@ -23,6 +23,17 @@ from crucible.verify import MathOutcomeVerifier
 _OUTCOME = MathOutcomeVerifier()
 
 
+def _require(*paths: Path) -> None:
+    """Committed real-run fixtures must be present — a missing one is a failure.
+
+    These are checked in, so absence means a deleted artifact, not "not captured yet".
+    Skipping instead would let CI's "it replays the recorded real run" claim pass
+    vacuously (DoD §5).
+    """
+    for path in paths:
+        assert path.exists(), f"committed fixture missing: {path.name}"
+
+
 def _replay_pass_at_1(problems: list, records: dict) -> int:
     policy = CassettePolicy(records)
     return sum(
@@ -55,10 +66,7 @@ _FIXTURE = Path(__file__).parent / "fixtures" / "gsm8k-m1.json"
 
 
 def test_real_gsm8k_fixture_reproduces_pass_at_1() -> None:
-    if not _FIXTURE.exists():  # pragma: no cover - present once a real run is recorded
-        import pytest
-
-        pytest.skip("no recorded GSM8K fixture yet — run `crucible run ... --record`")
+    _require(_FIXTURE)
     problems, records = load_cassette(_FIXTURE)
     assert len(problems) == 3
     # Reproduces the real Ollama run's numbers offline, no GPU/network (see PROGRESS):
@@ -71,10 +79,7 @@ _CURVE_FIXTURE = Path(__file__).parent / "fixtures" / "gsm8k-bestofn.json"
 
 
 def test_real_gsm8k_lift_curve_reproduces_offline() -> None:
-    if not _CURVE_FIXTURE.exists():  # pragma: no cover
-        import pytest
-
-        pytest.skip("no best-of-N cassette recorded yet")
+    _require(_CURVE_FIXTURE)
     from crucible.bench import curve_cells, load_samples
 
     records = load_samples(_CURVE_FIXTURE)
@@ -107,10 +112,7 @@ _7B_FIXTURE = Path(__file__).parent / "fixtures" / "math500-7b-pass1.json"
 
 
 def test_real_7b_baseline_reproduces_offline() -> None:
-    if not _7B_FIXTURE.exists():  # pragma: no cover
-        import pytest
-
-        pytest.skip("no 7B baseline cassette recorded yet")
+    _require(_7B_FIXTURE)
     problems, records = load_cassette(_7B_FIXTURE)
     assert len(problems) == 40
     # H2 baseline: qwen2.5:7b-instruct pass@1 = 27/40 = 67.5% on MATH-500 (problems
@@ -121,10 +123,7 @@ def test_real_7b_baseline_reproduces_offline() -> None:
 
 
 def test_real_math500_lift_curve_reproduces_offline() -> None:
-    if not all(f.exists() for f in _MATH500_FIXTURES):  # pragma: no cover
-        import pytest
-
-        pytest.skip("no MATH-500 bench cassettes recorded yet")
+    _require(*_MATH500_FIXTURES)
     from crucible.bench import curve_cells, load_samples
 
     records = [r for f in _MATH500_FIXTURES for r in load_samples(f)]
@@ -224,10 +223,7 @@ def _replay_real_search(
 ) -> tuple[int, int, int]:
     steps = _FIXDIR / f"math500-{name}-hard-steps.json"
     prm = _FIXDIR / f"math500-{name}-hard-prm.json"
-    if not (steps.exists() and prm.exists()):  # pragma: no cover
-        import pytest
-
-        pytest.skip(f"no real {name} cassette recorded yet")
+    _require(steps, prm)
     bundle = load_bundle(steps)
     policy = CassettePolicy(bundle.traces, bundle.steps)
     process = CassetteProcessVerifier(load_prm_cassette(prm))
@@ -237,6 +233,37 @@ def _replay_real_search(
         correct += _OUTCOME.verify(problem, chosen).correct
         tokens += chosen.compute.total_tokens
     return len(bundle.problems), correct, tokens
+
+
+def test_real_hard_subset_best_of_n_reproduces_offline() -> None:
+    """RESULTS §0.1's best-of-N baseline — the numbers beam/MCTS are compared against.
+
+    The 8 problems are read from the beam cassette itself, so this asserts the *same*
+    matched subset the overlay chart uses (what `bench curve --restrict-to-runs` builds
+    from the live run dirs, which are gitignored).
+    """
+    steps = _FIXDIR / "math500-beam-hard-steps.json"
+    _require(steps, *_MATH500_FIXTURES)
+    from crucible.bench import curve_cells, filter_records, load_samples
+
+    hard_ids = {p.id for p in load_bundle(steps).problems}
+    assert len(hard_ids) == 8
+    records = filter_records(
+        [r for f in _MATH500_FIXTURES for r in load_samples(f)], problem_ids=hard_ids
+    )
+    assert len(records) == 24  # 8 hardest problems x 3 seeds
+
+    cells = curve_cells(records, [8], has_prm=True)
+
+    def hits(selection: str) -> int:
+        return int(next(c for c in cells if c["selection"] == selection and c["n"] == 8)["correct"])
+
+    # The 1.5B policy cannot do these at all unaided: pass@1 = 0/24 (RESULTS §0.1).
+    assert int(next(c for c in cells if c["method"] == "pass1")["correct"]) == 0
+    assert hits("majority") == 1  # 4.2%
+    assert hits("prm") == 4  # 16.7% — the PRM beats majority even here
+    assert hits("oracle") == 11  # 45.8% — the headroom
+    # Real beam (0/8) and MCTS (1/8) are measured against exactly these.
 
 
 def test_real_beam_cell_reproduces_offline() -> None:

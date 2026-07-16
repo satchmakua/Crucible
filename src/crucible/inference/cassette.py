@@ -77,6 +77,12 @@ class RecordingPolicy:
         self._records: dict[str, tuple[Problem, list[Trace]]] = {}
         self._problems: dict[str, Problem] = {}
         self._step_records: dict[str, list[list[Step]]] = {}
+        self._sampling: dict[str, Any] = {}
+
+    def _note_sampling(self, temperature: float, max_tokens: int) -> None:
+        # Provenance: a committed fixture should say what produced it, not just "ollama".
+        self._sampling.setdefault("temperature", temperature)
+        self._sampling.setdefault("max_tokens", max_tokens)
 
     def sample_full(
         self, problem: Problem, *, n: int, temperature: float, max_tokens: int
@@ -86,6 +92,8 @@ class RecordingPolicy:
         )
         self._records[problem.id] = (problem, traces)
         self._problems[problem.id] = problem
+        self._note_sampling(temperature, max_tokens)
+        self._sampling.setdefault("n", n)
         return traces
 
     def sample_step(
@@ -94,6 +102,7 @@ class RecordingPolicy:
         steps = self._inner.sample_step(
             problem, prefix, n=n, temperature=temperature, max_tokens=max_tokens
         )
+        self._note_sampling(temperature, max_tokens)
         # FIFO batches per key: two identical prefixes in one search (rare but legal)
         # record two batches and replay in the same order.
         self._step_records.setdefault(step_key(problem.id, prefix), []).append(steps)
@@ -104,6 +113,11 @@ class RecordingPolicy:
         """Write the captured problems + traces + step batches to a JSON cassette."""
         data = {
             "backend": getattr(self._inner, "name", "unknown"),
+            # Self-describing provenance: which model, sampled how. Without this a
+            # committed fixture can't be traced back to the run that produced it.
+            "model": getattr(self._inner, "model", None),
+            "seed": getattr(self._inner, "_seed", None),
+            "sampling": dict(self._sampling),
             "records": [
                 {"problem": _problem_to_dict(p), "traces": [_trace_to_dict(t) for t in ts]}
                 for p, ts in self._records.values()

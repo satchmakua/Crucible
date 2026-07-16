@@ -13,7 +13,7 @@ identical samples) that regenerates offline in CI, with the honest caveats count
 compute-efficient than 1.5B+search, so small-beats-big does **not** hold here; real beam/MCTS
 are the most expensive and don't win on this non-reasoning stack). Hardening: **H1 ✓**, **H3 ✓**
 (cassettes now cover policy + PRM + stepwise search), **H4 ✓**; **H2 measured (honest negative)**.
-**162 tests** green. See the newest entry below.
+**163 tests** green. See the newest entry below.
 
 ## State of the tree
 
@@ -52,6 +52,48 @@ are the most expensive and don't win on this non-reasoning stack). Hardening: **
 | CLI (run/report/sweep/compare/bench/version) | `cli.py` | ✅ (all real) |
 
 ---
+
+## 2026-07-14 — Final polish pass: a stale published number, and a Makefile
+
+A DoD-driven polish audit (multi-agent, every finding verified by reading/running the
+files). It caught a **wrong number in the results doc** — the kind of thing this project
+exists to not do:
+
+- **`docs/RESULTS.md` §1 published a stale MCTS row.** It said `mcts budget=4000 → 77.8%
+  @ 4,075`; re-running the documented `crucible sweep configs/results.yaml` gives **88.9%
+  [67%, 97%] @ 4,069**. 77.8% was the *pre-H4* figure — from before the fix that removed a
+  wasted PRM eval. Corrected (+ the `budget=2000` row). Every other §1/§2 row reproduced
+  exactly.
+- **"Reproduces every number in this section" was an overclaim.** §0.1's best-of-N
+  hard-subset rows (majority@8 4.2% / PRM@8 16.7% / oracle@8 45.8%) were asserted by no
+  test, and the only command that produced them read from gitignored `runs/` dirs. Fixed by
+  making the claim *true*: a new test derives the 8 problem ids from the beam cassette
+  itself and asserts those cells.
+- **Real-fixture tests silently skipped when a fixture was missing** — so CI's "it replays
+  the recorded real run" (DoD §5) could pass vacuously. Guards are now hard assertions
+  (verified: deleting a fixture fails loudly; restoring it passes).
+- **`Makefile`** — DoD §5 asks for one `make demo`; there wasn't one. `make demo` now
+  replays the real captured runs offline (no GPU/network) and prints the headline curve;
+  plus `check`/`lint`/`typecheck`/`test`/`curve`. (`make` isn't installed on the Windows
+  dev box, so the README gives the one-line equivalent; every recipe step was run by hand.)
+- **CLI**: `run` gained the beam/MCTS knobs it never exposed (`--beam-width`,
+  `--beam-expansions`, `--max-steps`, `--budget-tokens`) — ROADMAP M4/M6 documented these
+  exact flags and they **errored** ("No such option"); capturing the real beam/MCTS runs had
+  required hand-written YAML. Verified they drive real compute (width 1→4: 1,248→3,984 tok).
+  Also: stale `--help` strings (`method` "more in later milestones", `dataset` "gsm8k/math500
+  in M1", `selection` missing `prm`), a stale module docstring, and an unknown-backend error
+  that omitted `synthetic`/`stepwise` while advertising unimplemented `hosted`.
+- **Docs/hygiene**: README linked `CLAUDE.md` (globally gitignored → 404 in any clone);
+  RESULTS' "Reproducing" block still framed real numbers as hypothetical and named a model
+  (`qwen2.5-math-1.5b-instruct`) that resolves on no machine here; `§1–§6` mislabeled (§6 is
+  Threats to validity); stale Tech-stack prose ("mock now"); `docs/README.md` didn't index
+  RESULTS.md (the headline doc); `.gitignore` didn't cover `.claude/`/`CLAUDE.md` (relied on
+  a machine-local global file); cells-`.json` provenance added for the two new figures.
+- **Cassette provenance**: `RecordingPolicy.save()` recorded only `backend` — now also
+  `model`, `seed`, and sampling params, so a committed fixture self-describes. Backward
+  compatible (old fixtures still load).
+- **Verified, not assumed**: every offline command in README/RESULTS was executed (pass1,
+  code-sample, both sweeps, compare, bench curve, version) — all pass. **163 tests** green.
 
 ## 2026-07-14 — The real MATH-500 headline: `crucible bench`, real beam/MCTS, honest H1/H2
 
